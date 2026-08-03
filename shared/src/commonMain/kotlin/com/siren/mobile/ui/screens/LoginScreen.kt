@@ -6,18 +6,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mail
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,9 +29,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.siren.mobile.resources.Res
-import com.siren.mobile.resources.ic_splash_shield
+import com.siren.mobile.resources.ic_siren_wave
 import com.siren.mobile.ui.components.BannerTone
 import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.PrimaryButton
@@ -42,7 +39,11 @@ import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.Space
 import org.jetbrains.compose.resources.painterResource
 
-/** Prototype screen 02. */
+/**
+ * Prototype screen 02, laid out to the approved reference: the seismograph mark and
+ * the full product name are centred above the form, then fields, then the primary
+ * action.
+ */
 @Composable
 fun LoginScreen(
     loading: Boolean,
@@ -60,95 +61,66 @@ fun LoginScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = Layout.screenPadding),
+        horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Space.l),
     ) {
-        Box(Modifier.padding(top = Space.xxl))
+        Box(Modifier.height(Space.xxxl))
 
-        // Brand lockup — establishes what the app is before asking for credentials.
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(Space.m),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Surface(
-                shape = RoundedCornerShape(Layout.card),
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(52.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        painter = painterResource(Res.drawable.ic_splash_shield),
-                        contentDescription = null,
-                        modifier = Modifier.size(28.dp),
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                    )
-                }
-            }
-            Column {
-                Text(
-                    "S.I.R.E.N.",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.5.sp,
-                )
-                Text(
-                    "Seismic Integrated Response & Emergency Notification",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        Icon(
+            painter = painterResource(Res.drawable.ic_siren_wave),
+            contentDescription = null,
+            modifier = Modifier
+                .widthIn(max = 168.dp)
+                .height(84.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
 
-        Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
-            Text(
-                "Welcome back",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Text(
-                "Sign in to keep receiving campus earthquake alerts.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        Text(
+            "S.I.R.E.N. (Seismic Integrated Response & Emergency Notification)",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center,
+            fontWeight = FontWeight.Bold,
+        )
+
+        Box(Modifier.height(Space.xs))
 
         if (error != null) {
             InfoBanner(error, Icons.Filled.Lock, tone = BannerTone.Danger)
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
-            SirenField(
-                value = email,
-                onValueChange = { email = it },
-                label = "Email",
-                leadingIcon = Icons.Filled.Mail,
-                keyboardType = KeyboardType.Email,
-            )
-            SirenField(
-                value = password,
-                onValueChange = { password = it },
-                label = "Password",
-                leadingIcon = Icons.Filled.Lock,
-                isPassword = true,
-            )
+        SirenField(
+            value = email,
+            onValueChange = { email = it },
+            label = "Email",
+            placeholder = "Enter your campus email",
+            leadingIcon = Icons.Filled.Mail,
+            keyboardType = KeyboardType.Email,
+        )
 
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                TextButton(onClick = { onForgotPassword(email) }) {
-                    Text("Forgot password?")
-                }
+        SirenField(
+            value = password,
+            onValueChange = { password = it },
+            label = "Password",
+            placeholder = "Enter your password",
+            leadingIcon = Icons.Filled.Lock,
+            isPassword = true,
+        )
+
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+            TextButton(onClick = { onForgotPassword(email) }) {
+                Text("Forgot password?")
             }
-
-            PrimaryButton(
-                text = "Sign in",
-                onClick = { onSignIn(email, password) },
-                enabled = canSubmit,
-                loading = loading,
-                icon = Icons.AutoMirrored.Filled.ArrowForward,
-            )
         }
 
+        PrimaryButton(
+            text = "Sign in",
+            onClick = { onSignIn(email, password) },
+            enabled = canSubmit,
+            loading = loading,
+        )
+
         Row(
-            Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -161,13 +133,11 @@ fun LoginScreen(
         }
 
         Text(
-            "During shaking: drop, cover, hold on.",
-            style = MaterialTheme.typography.labelSmall,
+            "During shaking: Drop, Cover, Hold On.",
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = Space.xxl),
+            modifier = Modifier.padding(bottom = Space.xxl),
         )
     }
 }

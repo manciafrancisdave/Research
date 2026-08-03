@@ -111,6 +111,9 @@ abstract class CopyComposeResourcesTask : DefaultTask() {
 
     @TaskAction
     fun copyFiles() {
+        // Wipe stale output first: changing resourceId leaves the previous directory
+        // behind and BOTH get packaged, shipping two copies of every asset.
+        fs.delete { delete(outputDir) }
         fs.copy {
             from(sourceDir)
             into(outputDir.get().dir("composeResources/${resourceId.get()}"))

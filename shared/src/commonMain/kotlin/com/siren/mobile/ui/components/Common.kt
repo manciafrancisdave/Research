@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import com.siren.mobile.model.Intensity
 import com.siren.mobile.model.ResponseStatus
 import com.siren.mobile.ui.theme.Layout
+import com.siren.mobile.ui.theme.SirenBlue
 import com.siren.mobile.ui.theme.SirenGradients
 import com.siren.mobile.ui.theme.SirenTheme
 import com.siren.mobile.ui.theme.Space
@@ -244,9 +245,13 @@ fun PrimaryButton(
     val container: Color
     val content: Color
     when (tone) {
+        // Deliberately NOT colorScheme.primary. Material lightens primary for dark
+        // themes, which turned the main call-to-action into a pale, washed-out blue
+        // that read as a different colour from the rest of the app. The brand blue is
+        // fixed across both themes; white on it is 5.17:1, comfortably above AA.
         ButtonTone.Primary -> {
-            container = MaterialTheme.colorScheme.primary
-            content = MaterialTheme.colorScheme.onPrimary
+            container = SirenBlue
+            content = Color.White
         }
         ButtonTone.Safe -> {
             container = status.safeFill; content = Color.White
@@ -271,7 +276,15 @@ fun PrimaryButton(
             .height(Layout.buttonHeight),
         enabled = enabled && !loading,
         shape = RoundedCornerShape(Layout.field),
-        colors = ButtonDefaults.buttonColors(containerColor = container, contentColor = content),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = container,
+            contentColor = content,
+            // Material's defaults derive these from onSurface alphas, which in dark
+            // mode look like a different component entirely. Anchoring them to the
+            // surface ramp keeps a disabled button obviously the same button.
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
     ) {
         if (loading) {
             CircularProgressIndicator(Modifier.size(20.dp), color = content, strokeWidth = 2.dp)
@@ -602,6 +615,7 @@ fun SirenField(
     singleLine: Boolean = true,
     supportingText: String? = null,
     isError: Boolean = false,
+    placeholder: String? = null,
 ) {
     var revealed by remember { mutableStateOf(false) }
     OutlinedTextField(
@@ -609,6 +623,7 @@ fun SirenField(
         onValueChange = onValueChange,
         modifier = modifier.fillMaxWidth(),
         label = { Text(label) },
+        placeholder = placeholder?.let { { Text(it) } },
         shape = RoundedCornerShape(Layout.field),
         singleLine = singleLine,
         isError = isError,

@@ -1,0 +1,16 @@
+*.iml
+.gradle/
+.idea/
+build/
+local.properties
+.kotlin/
+.cxx/
+captures/
+
+# Signing material — never commit these.
+keystore.properties
+*.jks
+*.keystore
+
+# Firebase config carries project identifiers; keep it out of public repos.
+app/google-services.json

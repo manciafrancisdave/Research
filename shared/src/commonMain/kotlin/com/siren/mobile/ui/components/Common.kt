@@ -14,11 +14,14 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -421,32 +424,110 @@ fun Avatar(
     }
 }
 
-/** Numeric readout with tabular figures so values don't jitter as they update. */
+/**
+ * Class status as one restrained block: a proportional bar and a compact legend.
+ *
+ * This replaces a row of four tinted tiles. Four equally-weighted pastel boxes gave
+ * every number identical importance, turned the top of the screen into a rainbow, and
+ * when everything was zero amounted to pure decoration. A single bar shows the split
+ * at a glance and the counts read as data, with colour reduced to a small dot that
+ * ties each figure to its status.
+ */
 @Composable
-fun StatTile(
-    value: String,
-    label: String,
-    color: Color,
+fun RosterBreakdown(
+    safe: Int,
+    needsHelp: Int,
+    noReply: Int,
     modifier: Modifier = Modifier,
 ) {
+    val s = SirenTheme.status
+    val total = safe + needsHelp + noReply
+
     Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(Layout.field),
-        color = color.copy(alpha = 0.10f),
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Layout.card),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(Layout.hairline, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(
-            Modifier.padding(vertical = Space.m, horizontal = Space.s),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(Space.xxs),
+            Modifier.padding(Space.l),
+            verticalArrangement = Arrangement.spacedBy(Space.m),
         ) {
-            Text(value, style = MaterialTheme.typography.headlineSmall.tabular(), color = color)
-            Text(
-                label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Class status",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    if (total == 1) "1 student" else "$total students",
+                    style = MaterialTheme.typography.labelMedium.tabular(),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(10.dp)
+                    .clip(RoundedCornerShape(Layout.pill)),
+            ) {
+                if (total == 0) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    )
+                } else {
+                    // Ordered most-urgent-first so the eye lands on trouble.
+                    if (needsHelp > 0) {
+                        Box(Modifier.weight(needsHelp.toFloat()).fillMaxHeight().background(s.dangerFill))
+                    }
+                    if (noReply > 0) {
+                        Box(Modifier.weight(noReply.toFloat()).fillMaxHeight().background(s.warnFill))
+                    }
+                    if (safe > 0) {
+                        Box(Modifier.weight(safe.toFloat()).fillMaxHeight().background(s.safeFill))
+                    }
+                }
+            }
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                LegendEntry(needsHelp, "Needs help", s.dangerFill)
+                LegendEntry(noReply, "No reply", s.warnFill)
+                LegendEntry(safe, "Safe", s.safeFill)
+            }
         }
+    }
+}
+
+@Composable
+private fun LegendEntry(count: Int, label: String, dot: Color) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(Space.s),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(dot)
+        )
+        Text(
+            "$count",
+            style = MaterialTheme.typography.titleMedium.tabular(),
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

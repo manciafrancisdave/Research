@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ContactEmergency
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -31,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.siren.mobile.model.DefaultEmergencyContacts
 import com.siren.mobile.model.EmergencyContact
 import com.siren.mobile.platform.Platform
 import com.siren.mobile.ui.components.Avatar
@@ -40,6 +42,7 @@ import com.siren.mobile.ui.components.ListGroup
 import com.siren.mobile.ui.components.ListRow
 import com.siren.mobile.ui.components.Pill
 import com.siren.mobile.ui.components.RowDivider
+import com.siren.mobile.ui.components.SecondaryButton
 import com.siren.mobile.ui.components.SirenField
 import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.SirenTheme
@@ -57,10 +60,13 @@ fun EmergencyContactsScreen(
     onRemove: (String) -> Unit,
     onCall: (String) -> Unit,
     onText: (String) -> Unit,
+    onRestoreDefaults: () -> Unit,
     onBack: () -> Unit,
 ) {
     var adding by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<EmergencyContact?>(null) }
+
+    val missingOfficial = DefaultEmergencyContacts.filterNot { d -> contacts.any { it.id == d.id } }
 
     LazyColumn(
         Modifier.fillMaxWidth(),
@@ -88,6 +94,22 @@ fun EmergencyContactsScreen(
                 "SMS fallback is active — these contacts are still reached when there is no internet.",
                 Icons.Filled.Sms,
             )
+        }
+
+        // Only offered when something is actually missing, so it is not permanent
+        // clutter for the majority who never delete one.
+        if (missingOfficial.isNotEmpty()) {
+            item {
+                SecondaryButton(
+                    text = if (missingOfficial.size == 1) {
+                        "Restore 1 official number"
+                    } else {
+                        "Restore ${missingOfficial.size} official numbers"
+                    },
+                    onClick = onRestoreDefaults,
+                    icon = Icons.Filled.Restore,
+                )
+            }
         }
 
         if (contacts.isEmpty()) {

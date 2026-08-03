@@ -1,6 +1,7 @@
 package com.siren.mobile.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Groups
@@ -43,8 +44,8 @@ import com.siren.mobile.ui.components.Pill
 import com.siren.mobile.ui.components.RowDivider
 import com.siren.mobile.ui.components.SectionHeader
 import com.siren.mobile.ui.components.SirenField
+import com.siren.mobile.ui.components.RosterBreakdown
 import com.siren.mobile.ui.components.SkeletonList
-import com.siren.mobile.ui.components.StatTile
 import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.SirenTheme
 import com.siren.mobile.ui.theme.Space
@@ -154,16 +155,9 @@ fun TeacherDashboardScreen(
             }
         }
 
-        item {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Space.s),
-            ) {
-                StatTile("${roster.size}", "Total", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
-                StatTile("$safe", "Safe", status.safe, Modifier.weight(1f))
-                StatTile("$help", "Needs help", status.danger, Modifier.weight(1f))
-                StatTile("$noReply", "No reply", status.warn, Modifier.weight(1f))
-            }
+        // Only meaningful once there is a class to describe.
+        if (roster.isNotEmpty()) {
+            item { RosterBreakdown(safe = safe, needsHelp = help, noReply = noReply) }
         }
 
         item {
@@ -176,17 +170,18 @@ fun TeacherDashboardScreen(
         }
 
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+            // Scrolls rather than wraps — with counts appended these used to break
+            // onto three lines inside a single chip. The counts now live in the
+            // status block above, so they are not duplicated here either.
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(Space.s),
+            ) {
                 RosterFilter.entries.forEach { f ->
-                    val count = when (f) {
-                        RosterFilter.ALL -> roster.size
-                        RosterFilter.NEEDS_HELP -> help
-                        RosterFilter.NO_REPLY -> noReply
-                    }
                     FilterChip(
                         selected = filter == f,
                         onClick = { filter = f },
-                        label = { Text("${f.label} · $count") },
+                        label = { Text(f.label) },
                         shape = RoundedCornerShape(Layout.pill),
                         colors = FilterChipDefaults.filterChipColors(),
                     )
@@ -202,7 +197,7 @@ fun TeacherDashboardScreen(
             roster.isEmpty() -> item {
                 EmptyState(
                     title = "No students yet",
-                    subtitle = "Students appear here once their account has the same classId as yours. Set it in the Firebase console.",
+                    subtitle = "Students appear here once they are assigned to your class. Ask the school registrar to add them.",
                     icon = Icons.Filled.Groups,
                 )
             }

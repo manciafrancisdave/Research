@@ -136,9 +136,38 @@ data class EmergencyContact(
     val primary: Boolean = false,
 )
 
+/**
+ * Official City of Bogo responders, seeded for every user on first run so a student
+ * has someone to call before they have added anyone themselves.
+ *
+ * The stable `id` prefix is what lets the app tell a seeded contact from a
+ * user-added one — a deliberately deleted default must not silently reappear.
+ */
+val DefaultEmergencyContacts: List<EmergencyContact> = listOf(
+    EmergencyContact(
+        id = "default_bogo_police",
+        name = "Bogo Police Station",
+        relation = "Police",
+        phone = "0905 600 2028",
+        primary = true,
+    ),
+    EmergencyContact(
+        id = "default_emergency_response",
+        name = "Emergency Response Unit",
+        relation = "Rescue / medical",
+        phone = "0919 920 4635",
+    ),
+    EmergencyContact(
+        id = "default_bogo_fire",
+        name = "Bogo Fire Department",
+        relation = "Fire",
+        phone = "0917 127 9158",
+    ),
+)
+
 data class SirenSettings(
     val criticalAlerts: Boolean = true,
     val vibration: Boolean = true,
     val darkMode: Boolean = false,
-    val contacts: List<EmergencyContact> = emptyList(),
+    val contacts: List<EmergencyContact> = DefaultEmergencyContacts,
 )

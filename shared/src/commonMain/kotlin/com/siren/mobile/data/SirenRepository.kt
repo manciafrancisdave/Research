@@ -2,6 +2,7 @@ package com.siren.mobile.data
 
 import com.siren.mobile.model.AlertRecord
 import com.siren.mobile.model.AlertSource
+import com.siren.mobile.model.DefaultEmergencyContacts
 import com.siren.mobile.model.EmergencyContact
 import com.siren.mobile.model.Intensity
 import com.siren.mobile.model.LinkedPerson
@@ -599,18 +600,50 @@ object SirenRepository {
     // ------------------------------------------------------------ settings
 
     private fun loadSettings() {
-        val raw = Platform.services.readSettingsJson() ?: return
-        runCatching { _settings.value = json.decodeFromString(SettingsDoc.serializer(), raw).toModel() }
+        val raw = Platform.services.readSettingsJson()
+        if (raw == null) {
+            // Fresh install — SirenSettings() already carries the official Bogo
+            // responder numbers. Persist now so the seeded flag is recorded.
+            persistSettings(_settings.value)
+            return
+        }
+        runCatching {
+            val doc = json.decodeFromString(SettingsDoc.serializer(), raw)
+            val stored = doc.toModel()
+            if (doc.seededDefaults) {
+                _settings.value = stored
+            } else {
+                // Install that predates the official numbers: add only the ones it has
+                // never seen, then record that we have. After this a deleted default
+                // stays deleted rather than reappearing on every launch.
+                val known = stored.contacts.map { it.id }.toSet()
+                val merged = stored.copy(
+                    contacts = DefaultEmergencyContacts.filterNot { it.id in known } + stored.contacts,
+                )
+                _settings.value = merged
+                persistSettings(merged)
+            }
+        }
+    }
+
+    private fun persistSettings(settings: SirenSettings) {
+        runCatching {
+            Platform.services.writeSettingsJson(
+                json.encodeToString(SettingsDoc.serializer(), SettingsDoc.from(settings))
+            )
+        }
     }
 
     fun updateSettings(transform: (SirenSettings) -> SirenSettings) {
         val updated = transform(_settings.value)
         _settings.value = updated
-        runCatching {
-            Platform.services.writeSettingsJson(
-                json.encodeToString(SettingsDoc.serializer(), SettingsDoc.from(updated))
-            )
-        }
+        persistSettings(updated)
+    }
+
+    /** Re-adds any official responder number the user has removed. */
+    fun restoreDefaultContacts() = updateSettings { s ->
+        val known = s.contacts.map { it.id }.toSet()
+        s.copy(contacts = DefaultEmergencyContacts.filterNot { it.id in known } + s.contacts)
     }
 
     fun addEmergencyContact(contact: EmergencyContact) =
@@ -670,6 +703,11 @@ internal data class SettingsDoc(
     val vibration: Boolean = true,
     val darkMode: Boolean = false,
     val contacts: List<ContactDoc> = emptyList(),
+    /**
+     * Records that the official responder numbers have been added once. Without it,
+     * a user who deliberately deletes one would get it back on the next launch.
+     */
+    val seededDefaults: Boolean = false,
 ) {
     fun toModel() = SirenSettings(
         criticalAlerts = criticalAlerts,
@@ -684,6 +722,7 @@ internal data class SettingsDoc(
             vibration = s.vibration,
             darkMode = s.darkMode,
             contacts = s.contacts.map { ContactDoc(it.id, it.name, it.relation, it.phone, it.primary) },
+            seededDefaults = true,
         )
     }
 }

@@ -293,7 +293,6 @@ private fun AppContent() {
                         settings = settings,
                         versionName = Platform.services.versionName,
                         onUpdateSettings = { repo.updateSettings(it) },
-                        onChangeRole = { repo.updateRole(it) },
                         onOpenContacts = { push(Dest.Contacts) },
                         onSignOut = { repo.signOut() },
                     )
@@ -327,6 +326,7 @@ private fun AppContent() {
                         onRemove = { repo.removeEmergencyContact(it) },
                         onCall = { Platform.services.dial(it) },
                         onText = { Platform.services.sendSms(it) },
+                        onRestoreDefaults = { repo.restoreDefaultContacts() },
                         onBack = { pop() },
                     )
 

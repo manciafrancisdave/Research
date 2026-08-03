@@ -20,12 +20,10 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PrivacyTip
-import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -62,12 +60,10 @@ fun SettingsScreen(
     settings: SirenSettings,
     versionName: String,
     onUpdateSettings: ((SirenSettings) -> SirenSettings) -> Unit,
-    onChangeRole: (Role) -> Unit,
     onOpenContacts: () -> Unit,
     onSignOut: () -> Unit,
     onBack: (() -> Unit)? = null,
 ) {
-    var roleDialog by remember { mutableStateOf(false) }
     var signOutDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -165,8 +161,6 @@ fun SettingsScreen(
                 onOpenContacts,
             )
             RowDivider()
-            NavRow(Icons.Filled.SwapHoriz, "Switch role", user.role.label) { roleDialog = true }
-            RowDivider()
             NavRow(Icons.Filled.PrivacyTip, "Privacy & data", "How your responses are stored") {}
             RowDivider()
             NavRow(Icons.Filled.Info, "About S.I.R.E.N.", "Version $versionName") {}
@@ -196,36 +190,6 @@ fun SettingsScreen(
         )
 
         Box(Modifier.padding(bottom = Space.xxl))
-    }
-
-    if (roleDialog) {
-        AlertDialog(
-            onDismissRequest = { roleDialog = false },
-            title = { Text("Switch role") },
-            text = {
-                Column {
-                    Role.entries.forEach { role ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = Space.s),
-                            horizontalArrangement = Arrangement.spacedBy(Space.s),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            RadioButton(
-                                selected = role == user.role,
-                                onClick = {
-                                    onChangeRole(role)
-                                    roleDialog = false
-                                },
-                            )
-                            Text(role.label, style = MaterialTheme.typography.bodyLarge)
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { roleDialog = false }) { Text("Cancel") } },
-        )
     }
 
     if (signOutDialog) {

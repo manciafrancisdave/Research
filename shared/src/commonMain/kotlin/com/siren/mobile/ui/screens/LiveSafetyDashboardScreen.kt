@@ -33,8 +33,8 @@ import com.siren.mobile.ui.components.ListGroup
 import com.siren.mobile.ui.components.Pill
 import com.siren.mobile.ui.components.PrimaryButton
 import com.siren.mobile.ui.components.RowDivider
+import com.siren.mobile.ui.components.RosterBreakdown
 import com.siren.mobile.ui.components.SectionHeader
-import com.siren.mobile.ui.components.StatTile
 import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.SirenTheme
 import com.siren.mobile.ui.theme.Space
@@ -130,12 +130,8 @@ fun LiveSafetyDashboardScreen(
             }
         }
 
-        item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space.s)) {
-                StatTile("$safe", "Safe", status.safe, Modifier.weight(1f))
-                StatTile("$help", "Needs help", status.danger, Modifier.weight(1f))
-                StatTile("$noReply", "No response", status.warn, Modifier.weight(1f))
-            }
+        if (roster.isNotEmpty()) {
+            item { RosterBreakdown(safe = safe, needsHelp = help, noReply = noReply) }
         }
 
         item { SectionHeader(title = "Sorted by urgency") }

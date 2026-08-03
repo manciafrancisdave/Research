@@ -219,8 +219,23 @@ Firebase **Email/Password**. Anonymous sign-in was used in v1.0 and has been rem
 it lost accounts on reinstall, breaking parent links and history.
 
 - Role is chosen **before** the account exists, then written into the user document
-- Role **can** be changed later (Settings → Switch role)
+- Role is **fixed at sign-up and cannot be changed in the app.** Settings has no
+  "Switch role" entry. `SirenRepository.updateRole` still exists for administrative
+  correction from outside the UI, but nothing calls it — do not re-expose it without
+  asking. (Note this reverses the prototype, which offered role switching.)
 - The **ESP32 has its own account** and writes alert documents directly; the app only listens
+
+## Emergency contacts
+
+Three official City of Bogo responders are seeded for every user on first run
+(`DefaultEmergencyContacts` in `model/Models.kt`): Bogo Police Station (primary),
+Emergency Response Unit, and Bogo Fire Department.
+
+Seeding is guarded by a `seededDefaults` flag in the stored settings JSON, which does
+two jobs: installs that predate the defaults pick them up once on upgrade, and a
+contact the user deliberately deletes does **not** reappear on the next launch. If one
+is removed, a "Restore official numbers" button appears on the Emergency Contacts
+screen — and only when something is actually missing.
 
 ## User roles
 

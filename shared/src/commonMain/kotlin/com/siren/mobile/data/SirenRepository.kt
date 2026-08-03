@@ -290,7 +290,17 @@ object SirenRepository {
                         lastIncomingId = newest?.id
                     } else if (newest != null && newest.id != lastIncomingId) {
                         lastIncomingId = newest.id
-                        if (!newest.closed) _incomingAlert.value = newest
+                        if (!newest.closed) {
+                            _incomingAlert.value = newest
+                            // Foreground path. The push path starts the alarm from
+                            // SirenMessagingService instead.
+                            Platform.services.startAlarm(
+                                newest.id,
+                                newest.intensity,
+                                newest.magnitudeG,
+                                _settings.value.vibration,
+                            )
+                        }
                     }
                     newest?.let { ensureRosterListener(it.id) }
                 }
@@ -530,6 +540,8 @@ object SirenRepository {
     }
 
     fun submitMyResponse(alertId: String, status: ResponseStatus) {
+        // Responding is one of the three things that silences the alarm.
+        Platform.services.stopAlarm()
         val uid = auth.currentUser?.uid ?: return
         val payload = ResponseDoc(
             userId = uid,
@@ -579,6 +591,8 @@ object SirenRepository {
     }
 
     fun consumeIncomingAlert() {
+        Platform.services.stopAlarm()
+        Platform.services.clearNotifications()
         _incomingAlert.value = null
     }
 

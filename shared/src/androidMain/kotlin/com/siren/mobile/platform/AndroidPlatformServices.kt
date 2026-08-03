@@ -14,8 +14,10 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessaging
 import com.siren.mobile.model.Intensity
+import com.siren.mobile.notify.SirenAlarmService
 
 /**
  * Android half of [PlatformServices].
@@ -27,6 +29,7 @@ class AndroidPlatformServices(
     context: Context,
     private val activityClass: Class<*>,
     private val smallIconRes: Int,
+    private val alarmSoundRes: Int,
     override val versionName: String,
 ) : PlatformServices {
 
@@ -41,6 +44,47 @@ class AndroidPlatformServices(
 
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    init {
+        // The alarm service lives in this library and cannot see the app module's R
+        // class or MainActivity, so they are handed over here.
+        SirenAlarmService.soundResId = alarmSoundRes
+        SirenAlarmService.smallIconResId = smallIconRes
+        SirenAlarmService.activityClass = activityClass
+    }
+
+    // ---------------------------------------------------------------- alarm
+
+    override fun startAlarm(alertId: String, intensity: Intensity, magnitudeG: Double, vibrate: Boolean) {
+        // Green is informational only — a single chime and buzz, no service, and it
+        // respects the ringer. Anything higher escalates to the foreground service.
+        if (intensity == Intensity.GREEN) {
+            showAlertNotification(alertId, intensity, magnitudeG)
+            if (vibrate) vibrateForIntensity(intensity)
+            return
+        }
+
+        val intent = Intent(appContext, SirenAlarmService::class.java).apply {
+            action = SirenAlarmService.ACTION_START
+            putExtra(SirenAlarmService.EXTRA_ALERT_ID, alertId)
+            putExtra(SirenAlarmService.EXTRA_INTENSITY, intensity.wire)
+            putExtra(SirenAlarmService.EXTRA_MAGNITUDE, magnitudeG)
+            putExtra(SirenAlarmService.EXTRA_VIBRATE, vibrate)
+            // Yellow steps down on its own; Red never does.
+            putExtra(
+                SirenAlarmService.EXTRA_TIMEOUT_MS,
+                if (intensity == Intensity.YELLOW) 30_000L else 0L,
+            )
+        }
+        runCatching { ContextCompat.startForegroundService(appContext, intent) }
+    }
+
+    override fun stopAlarm() {
+        val intent = Intent(appContext, SirenAlarmService::class.java)
+            .setAction(SirenAlarmService.ACTION_STOP)
+        runCatching { ContextCompat.startForegroundService(appContext, intent) }
+        cancelVibration()
+    }
 
     // ------------------------------------------------------------ vibration
 

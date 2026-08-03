@@ -1,7 +1,12 @@
 package com.siren.mobile.platform
 
 import com.siren.mobile.model.Intensity
+import platform.AVFAudio.AVAudioPlayer
+import platform.AVFAudio.AVAudioSession
+import platform.AVFAudio.AVAudioSessionCategoryPlayback
+import platform.AVFAudio.setActive
 import platform.AudioToolbox.AudioServicesPlaySystemSound
+import platform.Foundation.NSBundle
 import platform.Foundation.NSDate
 import platform.Foundation.NSURL
 import platform.Foundation.NSUserDefaults
@@ -79,6 +84,51 @@ class IosPlatformServices(
 
     /** iOS cannot cancel an in-flight system vibration. */
     override fun cancelVibration() = Unit
+
+    // ---------------------------------------------------------------- alarm
+
+    private var alarmPlayer: AVAudioPlayer? = null
+
+    /**
+     * iOS is materially weaker than Android here, and that has to be stated rather
+     * than papered over:
+     *
+     *  - Looping audio while backgrounded needs the `audio` background mode, and iOS
+     *    can still suspend it under memory pressure.
+     *  - Playing through silent mode at all requires Apple's **Critical Alerts**
+     *    entitlement, granted only on request.
+     *  - A push cannot itself loop a sound; the app has to be foregrounded (or opened
+     *    from the notification) for this to run.
+     *
+     * NOT YET COMPILED — see the class header.
+     */
+    override fun startAlarm(alertId: String, intensity: Intensity, magnitudeG: Double, vibrate: Boolean) {
+        showAlertNotification(alertId, intensity, magnitudeG)
+        if (vibrate) vibrateForIntensity(intensity)
+        if (intensity == Intensity.GREEN) return
+
+        val url = NSBundle.mainBundle.URLForResource("siren_alarm", "wav") ?: return
+        runCatching {
+            AVAudioSession.sharedInstance().setCategory(AVAudioSessionCategoryPlayback, null)
+            AVAudioSession.sharedInstance().setActive(true, null)
+            alarmPlayer = AVAudioPlayer(contentsOfURL = url, error = null).apply {
+                // -1 = loop forever; only stopAlarm() ends it.
+                numberOfLoops = if (intensity == Intensity.RED) -1 else 3
+                prepareToPlay()
+                play()
+            }
+            Platform.setAlarmActive(true)
+        }
+    }
+
+    override fun stopAlarm() {
+        runCatching {
+            alarmPlayer?.stop()
+            alarmPlayer = null
+            AVAudioSession.sharedInstance().setActive(false, null)
+        }
+        Platform.setAlarmActive(false)
+    }
 
     // -------------------------------------------------------- notifications
 

@@ -7,6 +7,15 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- The alarm plays from a foreground service so it survives the app being
+         backgrounded, which is exactly when an earthquake alarm matters most. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- Android 14+ restricts this to calling/alarm apps. If it is denied the
+         full-screen alert never appears, so the notification actions on the alarm
+         service are the required fallback. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
     <application
         android:name=".SirenApp"
         android:allowBackup="true"
@@ -26,6 +35,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Lives in the :shared library; merged into the app at build time. -->
+        <service
+            android:name="com.siren.mobile.notify.SirenAlarmService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <service
             android:name=".notify.SirenMessagingService"

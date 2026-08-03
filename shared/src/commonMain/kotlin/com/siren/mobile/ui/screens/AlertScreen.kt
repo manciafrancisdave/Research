@@ -25,7 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -37,8 +37,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.TextButton
 import com.siren.mobile.model.AlertRecord
+import com.siren.mobile.model.AlertSource
+import com.siren.mobile.platform.Platform
 import com.siren.mobile.ui.components.ButtonTone
+import com.siren.mobile.ui.components.Pill
 import com.siren.mobile.ui.components.Haptics
 import com.siren.mobile.ui.components.PrimaryButton
 import com.siren.mobile.ui.components.intensityBrush
@@ -67,9 +71,9 @@ fun AlertScreen(
         label = "pulse",
     )
 
-    LaunchedEffect(alert.id, vibrationEnabled) {
-        if (vibrationEnabled) Haptics.forIntensity(alert.intensity)
-    }
+    // Sound and vibration are driven by the alarm service, not by this screen — the
+    // alarm has to keep running when this composable is not on screen at all.
+    val alarmActive by Platform.alarmActive.collectAsState()
 
     val time = remember(alert.detectedAt) { DateFmt.clockSeconds(alert.detectedAt) }
     val date = remember(alert.detectedAt) { DateFmt.date(alert.detectedAt) }
@@ -82,22 +86,31 @@ fun AlertScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Space.l),
     ) {
-        if (vibrationEnabled) {
-            Row(
-                Modifier
-                    .clip(RoundedCornerShape(Layout.pill))
-                    .background(Color.White.copy(alpha = 0.18f))
-                    .padding(horizontal = Space.m, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.Vibration, null, tint = Color.White, modifier = Modifier.size(16.dp))
-                Text(
-                    "ALARM · VIBRATION ON",
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(Space.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // A simulated event must never be mistakable for a real earthquake.
+            if (alert.source == AlertSource.SIMULATED) {
+                Pill("DEMO — NOT A REAL EVENT", intensityColor(alert.intensity), Color.White)
+            }
+            if (vibrationEnabled && alarmActive) {
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(Layout.pill))
+                        .background(Color.White.copy(alpha = 0.18f))
+                        .padding(horizontal = Space.m, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.Vibration, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    Text(
+                        "ALARM ON",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
         }
 
@@ -197,17 +210,33 @@ fun AlertScreen(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        Text(
-            "Dismiss",
-            color = Color.White.copy(alpha = 0.7f),
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier
-                .padding(top = Space.xs)
-                .clickable {
-                    Haptics.cancel()
-                    onDismiss()
-                },
-        )
+        // There must ALWAYS be a visible way out of a looping alarm. Silencing is
+        // deliberately separate from responding: it quiets the sound but leaves the
+        // safety confirmation outstanding.
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Space.l, Alignment.CenterHorizontally),
+        ) {
+            if (alarmActive) {
+                TextButton(onClick = { Platform.services.stopAlarm() }) {
+                    Text(
+                        "Silence alarm",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
+            TextButton(onClick = {
+                Haptics.cancel()
+                onDismiss()
+            }) {
+                Text(
+                    "Dismiss",
+                    color = Color.White.copy(alpha = 0.8f),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+        }
     }
 }
 

@@ -15,6 +15,7 @@ class SirenApp : Application() {
             context = this,
             activityClass = MainActivity::class.java,
             smallIconRes = R.drawable.ic_notification,
+            alarmSoundRes = R.raw.siren_alarm,
             versionName = BuildConfig.VERSION_NAME,
         )
         services.ensureChannels()

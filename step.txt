@@ -166,8 +166,30 @@
  the same classId on the teacher's own document.
 
  Demo Mode (Student home -> Demo Mode) fires a simulated Green / Yellow / Red
- alert without the hardware. Simulated events are tagged in history and are
- never sent to guardians by SMS.
+ alert without the hardware. Simulated events are tagged DEMO everywhere they
+ appear and are never sent to guardians by SMS.
+
+ --- THE ALARM ------------------------------------------------------------
+
+ A RED alert (>= 0.61 g) sounds an alarm that KEEPS GOING until someone taps.
+ It survives the screen locking, the app being closed, the notification being
+ swiped away, and the phone being on silent.
+
+ It stops ONLY by tapping one of:
+   * I'm Safe
+   * I Need Help
+   * Stop alarm   (silences the sound but you still owe a safety response)
+
+ Green is a single chime. Yellow repeats then stops after 30 seconds.
+
+ The tone is our own, NOT the official NDRRMC alert tone. That is deliberate:
+ this app is a supplementary school tool and must never be mistaken for an
+ official government warning during a real earthquake.
+
+ ON ANDROID 14 AND NEWER: if the phone denies the "full screen intent"
+ permission, the full-screen alert will not appear. The alarm still sounds and
+ the notification still carries the I'm Safe / I Need Help / Stop alarm
+ buttons. Test this before the defence.
 
 -------------------------------------------------------------------------------
  SECTION 5 - SIGNING KEY

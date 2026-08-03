@@ -29,7 +29,14 @@ class SirenMessagingService : FirebaseMessagingService() {
 
         Log.i("SirenMessaging", "alert $alertId $intensity ${magnitude}g")
 
-        Platform.services.showAlertNotification(alertId, intensity, magnitude)
+        // Starts the escalating alarm (and its own notification). Red loops until the
+        // user explicitly dismisses it.
+        Platform.services.startAlarm(
+            alertId,
+            intensity,
+            magnitude,
+            SirenRepository.settings.value.vibration,
+        )
 
         // Surfaces the full-screen alert if the app is already in the foreground.
         SirenRepository.showAlertById(alertId)

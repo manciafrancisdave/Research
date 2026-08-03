@@ -117,6 +117,21 @@ Each of these cost a debugging cycle:
   `androidx.compose.material.icons.automirrored.filled.ArrowBack`.
 - **No `String.format`/`SimpleDateFormat` in common code.** Use `Double.toFixed/asG/
   asGSpaced` and `DateFmt`.
+- **Resource shrinking silently deleted the alarm audio from the release build.**
+  `isShrinkResources = true` could not see `R.raw.siren_alarm` as reachable, because the
+  only reference is passed into `AndroidPlatformServices` and stashed in a static on the
+  alarm service. Debug played fine; release shipped with **zero** `res/raw` entries and
+  a completely silent alarm. `app/src/main/res/raw/keep.xml` pins it. After touching
+  shrinking, always confirm the *release* APK still contains `res/raw/siren_alarm.mp3` —
+  a passing build proves nothing here.
+- **Android 14+ restricts `USE_FULL_SCREEN_INTENT`** to calling/alarm apps. If it is
+  denied, the full-screen alert silently never appears — leaving a user with a looping
+  alarm and no visible way to stop it. The alarm notification's **I'm safe / I need
+  help / Stop alarm** actions are the required fallback; test with it denied.
+- **Notification channel settings are immutable after creation.** Changing sound or
+  vibration on `siren_alerts` does nothing on existing installs — bump the channel id.
+  The alarm service uses its own **silent** channel (`siren_alarm_playback`) precisely
+  so the notification does not play a second sound over MediaPlayer.
 - **Android Studio's bundled JBR 25 is too new.** Always build with JDK 17.
 
 ---
@@ -159,6 +174,44 @@ until then `defaultCriticalSound()` degrades to a normal sound.
   called anywhere yet
 
 ---
+
+## Emergency alarm
+
+**The Red alarm stops only when the user taps.** Not on a timer, not when the
+notification is swiped, not when the app is backgrounded, not on silent/DND, and not
+when audio focus is lost to a call. The three exits are **I'm Safe**, **I Need Help**
+and **Stop alarm** — and "Stop alarm" silences the sound while deliberately leaving the
+safety confirmation outstanding.
+
+| Level | Sound | Vibration | Service |
+|---|---|---|---|
+| Green ≤ 0.30 g | single chime, respects ringer | one pulse | none |
+| Yellow 0.31–0.60 g | repeats, stops after 30 s | repeating | foreground |
+| **Red ≥ 0.61 g** | **loops until dismissed, bypasses silent** | **continuous** | foreground |
+
+Android runs it from `SirenAlarmService` (a foreground service) — audio driven from a
+composable dies the moment the app is backgrounded, which is exactly when the alarm
+matters. It uses `USAGE_ALARM` audio attributes (that is what bypasses the ringer and
+DND), a `PARTIAL_WAKE_LOCK`, and `AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE` whose loss
+listener intentionally does nothing above Green.
+
+The tone is `app/src/main/res/raw/siren_alarm.mp3` — the **NDRRMC alert audio supplied
+by the project owner**, used at their explicit direction.
+
+Worth knowing if this is ever distributed beyond the school: an identical official tone
+can lead people to take this supplementary app for an official PHIVOLCS warning, and
+reproducing official emergency signals outside genuine alerts is restricted in a number
+of jurisdictions. A distinct synthesised alternative (alternating 960/720 Hz,
+square-dominant, whole-cycle segments so it loops seamlessly) can be regenerated at any
+time with `tools/make-alarm-tone.ps1` and dropped in as `siren_alarm.wav`.
+
+Because MP3 carries encoder padding, its loop point is not perfectly gapless. A
+2-second watchdog in the service restarts playback if it ever stalls, so the alarm
+cannot fall silent while an event is unanswered.
+
+Simulated (Demo Mode) events always render a `DEMO — NOT A REAL EVENT` badge on the
+full-screen alert. A simulation that is indistinguishable from a real earthquake would
+be a serious failure during a defence.
 
 ## Authentication
 

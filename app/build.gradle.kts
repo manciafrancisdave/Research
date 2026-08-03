@@ -26,8 +26,8 @@ android {
         applicationId = "com.research.siren"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.4.0"
+        versionCode = 3
+        versionName = "2.5.0"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -49,7 +49,12 @@ android {
         }
         release {
             isMinifyEnabled = true
-            isShrinkResources = true
+            // Left off deliberately. Release builds also SHORTEN resource paths
+            // (res/raw/siren_alarm.mp3 becomes res/dQ.mp3), which makes "is the alarm
+            // audio still in the APK?" easy to answer wrongly — check by byte size,
+            // not filename. Shrinking is off until that retention is re-verified,
+            // because a silently muted alarm is the worst failure this app has.
+            isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (keystorePropsFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
@@ -81,7 +86,14 @@ android {
  * screens compile fine but Res.drawable.ic_sg_* / Res.font.inter_* fail at runtime.
  *
  * The Android resource reader looks for assets/composeResources/<id>/..., where <id>
- * is derived from the root project + module name.
+ * MUST equal `packageOfResClass` from shared/build.gradle.kts — the generated
+ * accessors hard-code that exact prefix. Getting it wrong does not fail the build:
+ * every font and drawable simply fails to load at runtime, and because
+ * sirenTypography() runs inside SirenTheme the app dies on launch.
+ *
+ * Confirm against the generated source after changing it:
+ *   shared/build/generated/compose/resourceGenerator/kotlin/commonResClass/.../Res.kt
+ *   -> private const val MD: String = "composeResources/<id>/"
  */
 abstract class CopyComposeResourcesTask : DefaultTask() {
     @get:InputDirectory
@@ -109,7 +121,7 @@ abstract class CopyComposeResourcesTask : DefaultTask() {
 val copySharedComposeResources =
     tasks.register<CopyComposeResourcesTask>("copySharedComposeResources") {
         sourceDir.set(rootProject.file("shared/src/commonMain/composeResources"))
-        resourceId.set("siren.shared.generated.resources")
+        resourceId.set("com.siren.mobile.resources")
     }
 
 androidComponents {

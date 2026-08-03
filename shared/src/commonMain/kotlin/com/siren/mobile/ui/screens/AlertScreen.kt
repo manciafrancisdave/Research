@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.siren.mobile.model.AlertRecord
+import com.siren.mobile.ui.components.ButtonTone
 import com.siren.mobile.ui.components.Haptics
 import com.siren.mobile.ui.components.PrimaryButton
 import com.siren.mobile.ui.components.intensityBrush
@@ -184,10 +185,8 @@ fun AlertScreen(
                 onConfirmStatus()
             },
             icon = Icons.Filled.HowToReg,
-            brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                listOf(Color.White, Color.White)
-            ),
-            contentColor = intensityColor(alert.intensity),
+            tone = ButtonTone.OnColor,
+            onColorContent = intensityColor(alert.intensity),
         )
 
         Text(

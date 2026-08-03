@@ -1,30 +1,47 @@
 package com.siren.mobile.ui.components
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Sos
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,150 +53,181 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.siren.mobile.model.Intensity
 import com.siren.mobile.model.ResponseStatus
-import com.siren.mobile.ui.theme.Border
-import com.siren.mobile.ui.theme.Danger
-import com.siren.mobile.ui.theme.DangerTint
-import com.siren.mobile.ui.theme.Ink
-import com.siren.mobile.ui.theme.InkSubtle
-import com.siren.mobile.ui.theme.IntensityGreen
-import com.siren.mobile.ui.theme.IntensityRed
-import com.siren.mobile.ui.theme.IntensityYellow
 import com.siren.mobile.ui.theme.Layout
-import com.siren.mobile.ui.theme.Safe
-import com.siren.mobile.ui.theme.SafeTint
-import com.siren.mobile.ui.theme.SirenBlue
 import com.siren.mobile.ui.theme.SirenGradients
+import com.siren.mobile.ui.theme.SirenTheme
 import com.siren.mobile.ui.theme.Space
-import com.siren.mobile.ui.theme.Surface
-import com.siren.mobile.ui.theme.SurfaceTint
-import com.siren.mobile.ui.theme.Warn
-import com.siren.mobile.ui.theme.WarnTint
+import com.siren.mobile.util.tabular
+
+// ---------------------------------------------------------------- containers
+
+/**
+ * Three deliberate tiers. Using them consistently is what stops every screen looking
+ * like an undifferentiated stack of white cards.
+ */
+enum class SurfaceTier {
+    /** The one thing that matters on the screen. */
+    Primary,
+
+    /** Grouped rows, list items, secondary panels. */
+    Secondary,
+
+    /** Metadata and helper blocks — no container chrome at all. */
+    Tertiary,
+}
 
 @Composable
 fun SirenCard(
     modifier: Modifier = Modifier,
-    background: Color = Surface,
-    border: Color? = Border,
-    corner: androidx.compose.ui.unit.Dp = Layout.card,
+    tier: SurfaceTier = SurfaceTier.Secondary,
     onClick: (() -> Unit)? = null,
-    content: @Composable ColumnScopeAlias.() -> Unit,
+    contentPadding: Dp = Space.l,
+    content: @Composable ColumnScope.() -> Unit,
 ) {
-    Card(
-        modifier = if (onClick != null) modifier.clickable { onClick() } else modifier,
-        shape = RoundedCornerShape(corner),
-        colors = CardDefaults.cardColors(containerColor = background),
-        border = border?.let { BorderStroke(1.dp, it) },
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Column(Modifier.padding(Space.l), content = content)
+    val shape = if (tier == SurfaceTier.Primary) {
+        RoundedCornerShape(Layout.cardLarge)
+    } else {
+        RoundedCornerShape(Layout.card)
+    }
+    val container = when (tier) {
+        SurfaceTier.Primary -> MaterialTheme.colorScheme.surfaceContainerHigh
+        SurfaceTier.Secondary -> MaterialTheme.colorScheme.surface
+        SurfaceTier.Tertiary -> Color.Transparent
+    }
+    val border = if (tier == SurfaceTier.Secondary) {
+        BorderStroke(Layout.hairline, MaterialTheme.colorScheme.outlineVariant)
+    } else null
+
+    if (onClick != null) {
+        Surface(onClick = onClick, modifier = modifier, shape = shape, color = container, border = border) {
+            Column(Modifier.padding(contentPadding), content = content)
+        }
+    } else {
+        Surface(modifier = modifier, shape = shape, color = container, border = border) {
+            Column(Modifier.padding(contentPadding), content = content)
+        }
     }
 }
 
-typealias ColumnScopeAlias = androidx.compose.foundation.layout.ColumnScope
+/**
+ * A single container holding several rows separated by dividers. Reads as one
+ * considered block rather than N floating cards, and scans far faster.
+ */
+@Composable
+fun ListGroup(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Layout.card),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(Layout.hairline, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(content = content)
+    }
+}
+
+@Composable
+fun RowDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = Space.l + 42.dp + Space.m),
+        thickness = Layout.hairline,
+        color = MaterialTheme.colorScheme.outlineVariant,
+    )
+}
+
+/** One row inside a [ListGroup]. Meets the 48dp touch-target minimum. */
+@Composable
+fun ListRow(
+    title: String,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    leading: @Composable (() -> Unit)? = null,
+    trailing: @Composable (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
+) {
+    val body = @Composable {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = Layout.rowMinHeight)
+                .padding(horizontal = Space.l, vertical = Space.m),
+            horizontalArrangement = Arrangement.spacedBy(Space.m),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            leading?.invoke()
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space.xxs)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                subtitle?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            trailing?.invoke()
+        }
+    }
+    if (onClick != null) {
+        Surface(onClick = onClick, modifier = modifier, color = Color.Transparent) { body() }
+    } else {
+        Box(modifier) { body() }
+    }
+}
+
+// ------------------------------------------------------------------ headings
 
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
-        text = text,
-        modifier = modifier,
-        style = MaterialTheme.typography.labelMedium,
-        color = InkSubtle,
+        text = text.uppercase(),
+        modifier = modifier.padding(start = Space.xs),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         fontWeight = FontWeight.SemiBold,
     )
 }
 
 @Composable
-fun Pill(
-    text: String,
-    fg: Color,
-    bg: Color,
+fun SectionHeader(
+    title: String,
     modifier: Modifier = Modifier,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
 ) {
-    Box(
-        modifier
-            .clip(RoundedCornerShape(Layout.pill))
-            .background(bg)
-            .padding(horizontal = 10.dp, vertical = 5.dp)
+    Row(
+        modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(text, style = MaterialTheme.typography.labelSmall, color = fg, fontWeight = FontWeight.SemiBold)
+        SectionLabel(title)
+        if (actionLabel != null && onAction != null) {
+            TextButton(onClick = onAction) {
+                Text(actionLabel, style = MaterialTheme.typography.labelLarge)
+            }
+        }
     }
 }
 
-@Composable
-fun StatusChip(status: ResponseStatus, modifier: Modifier = Modifier) {
-    val (fg, bg) = when (status) {
-        ResponseStatus.SAFE -> Safe to SafeTint
-        ResponseStatus.NEEDS_HELP -> Danger to DangerTint
-        ResponseStatus.NO_RESPONSE -> Warn to WarnTint
-    }
-    val label = when (status) {
-        ResponseStatus.SAFE -> "Safe"
-        ResponseStatus.NEEDS_HELP -> "Needs help"
-        ResponseStatus.NO_RESPONSE -> "No reply"
-    }
-    Pill(label, fg, bg, modifier)
-}
+// ------------------------------------------------------------------- buttons
 
-fun intensityColor(intensity: Intensity): Color = when (intensity) {
-    Intensity.GREEN -> IntensityGreen
-    Intensity.YELLOW -> IntensityYellow
-    Intensity.RED -> IntensityRed
-}
-
-fun intensityBrush(intensity: Intensity): Brush = when (intensity) {
-    Intensity.GREEN -> SirenGradients.safe
-    Intensity.YELLOW -> SirenGradients.warn
-    Intensity.RED -> SirenGradients.danger
-}
-
-@Composable
-fun IntensityBadge(intensity: Intensity, modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .clip(RoundedCornerShape(Layout.pill))
-            .background(intensityColor(intensity).copy(alpha = 0.14f))
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-    ) {
-        Text(
-            "${intensity.severity.uppercase()} · LEVEL ${intensity.level}",
-            style = MaterialTheme.typography.labelSmall,
-            color = intensityColor(intensity),
-            fontWeight = FontWeight.Bold,
-        )
-    }
-}
-
-@Composable
-fun Avatar(
-    initials: String,
-    modifier: Modifier = Modifier,
-    size: androidx.compose.ui.unit.Dp = 44.dp,
-    background: Color = SurfaceTint,
-    foreground: Color = SirenBlue,
-) {
-    Box(
-        modifier
-            .size(size)
-            .clip(RoundedCornerShape(Layout.tile))
-            .background(background),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            initials,
-            color = foreground,
-            fontWeight = FontWeight.Bold,
-            fontSize = (size.value / 3).sp,
-        )
-    }
-}
+enum class ButtonTone { Primary, Safe, Danger, Neutral, OnColor }
 
 @Composable
 fun PrimaryButton(
@@ -189,25 +237,49 @@ fun PrimaryButton(
     enabled: Boolean = true,
     loading: Boolean = false,
     icon: ImageVector? = null,
-    brush: Brush = SirenGradients.brand,
-    contentColor: Color = Color.White,
+    tone: ButtonTone = ButtonTone.Primary,
+    onColorContent: Color = MaterialTheme.colorScheme.primary,
 ) {
-    val fg = if (enabled) contentColor else InkSubtle
-    Box(
-        modifier
+    val status = SirenTheme.status
+    val container: Color
+    val content: Color
+    when (tone) {
+        ButtonTone.Primary -> {
+            container = MaterialTheme.colorScheme.primary
+            content = MaterialTheme.colorScheme.onPrimary
+        }
+        ButtonTone.Safe -> {
+            container = status.safeFill; content = Color.White
+        }
+        ButtonTone.Danger -> {
+            container = status.dangerFill; content = Color.White
+        }
+        ButtonTone.Neutral -> {
+            container = MaterialTheme.colorScheme.surfaceContainerHigh
+            content = MaterialTheme.colorScheme.onSurface
+        }
+        // Sits on an already-saturated background, e.g. the full-screen alert.
+        ButtonTone.OnColor -> {
+            container = Color.White; content = onColorContent
+        }
+    }
+
+    Button(
+        onClick = onClick,
+        modifier = modifier
             .fillMaxWidth()
-            .height(Layout.fieldHeight)
-            .clip(RoundedCornerShape(Layout.field))
-            .background(if (enabled) brush else Brush.linearGradient(listOf(Border, Border)))
-            .clickable(enabled = enabled && !loading) { onClick() },
-        contentAlignment = Alignment.Center,
+            .height(Layout.buttonHeight),
+        enabled = enabled && !loading,
+        shape = RoundedCornerShape(Layout.field),
+        colors = ButtonDefaults.buttonColors(containerColor = container, contentColor = content),
     ) {
         if (loading) {
-            CircularProgressIndicator(color = fg, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
+            CircularProgressIndicator(Modifier.size(20.dp), color = content, strokeWidth = 2.dp)
         } else {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s)) {
-                Text(text, color = fg, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                icon?.let { Icon(it, null, tint = fg, modifier = Modifier.size(20.dp)) }
+            Text(text, style = MaterialTheme.typography.titleMedium)
+            icon?.let {
+                Spacer(Modifier.width(Space.s))
+                Icon(it, null, Modifier.size(20.dp))
             }
         }
     }
@@ -218,23 +290,305 @@ fun SecondaryButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     icon: ImageVector? = null,
 ) {
-    Box(
-        modifier
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier
             .fillMaxWidth()
-            .height(Layout.fieldHeight)
-            .clip(RoundedCornerShape(Layout.field))
-            .background(Surface)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center,
+            .height(Layout.buttonHeight),
+        enabled = enabled,
+        shape = RoundedCornerShape(Layout.field),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s)) {
-            icon?.let { Icon(it, null, tint = Ink, modifier = Modifier.size(20.dp)) }
-            Text(text, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+        icon?.let {
+            Icon(it, null, Modifier.size(20.dp))
+            Spacer(Modifier.width(Space.s))
+        }
+        Text(text, style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+// --------------------------------------------------------------------- chips
+
+@Composable
+fun Pill(
+    text: String,
+    fg: Color,
+    bg: Color,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+) {
+    Row(
+        modifier
+            .clip(RoundedCornerShape(Layout.pill))
+            .background(bg)
+            .padding(horizontal = Space.s + Space.xxs, vertical = Space.xs + Space.xxs),
+        horizontalArrangement = Arrangement.spacedBy(Space.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        icon?.let { Icon(it, null, Modifier.size(12.dp), tint = fg) }
+        Text(text, style = MaterialTheme.typography.labelSmall, color = fg, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/**
+ * Status is conveyed by icon + label + colour, never colour alone — a colour-blind
+ * teacher still has to be able to read the roster.
+ */
+@Composable
+fun StatusChip(status: ResponseStatus, modifier: Modifier = Modifier) {
+    val s = SirenTheme.status
+    val fg: Color
+    val bg: Color
+    val icon: ImageVector
+    val label: String
+    when (status) {
+        ResponseStatus.SAFE -> {
+            fg = s.safe; bg = s.safeContainer; icon = Icons.Filled.CheckCircle; label = "Safe"
+        }
+        ResponseStatus.NEEDS_HELP -> {
+            fg = s.danger; bg = s.dangerContainer; icon = Icons.Filled.Sos; label = "Needs help"
+        }
+        ResponseStatus.NO_RESPONSE -> {
+            fg = s.warn; bg = s.warnContainer; icon = Icons.Filled.HelpOutline; label = "No reply"
+        }
+    }
+    Pill(label, fg, bg, modifier, icon)
+}
+
+@Composable
+fun intensityColor(intensity: Intensity): Color {
+    val s = SirenTheme.status
+    return when (intensity) {
+        Intensity.GREEN -> s.safeFill
+        Intensity.YELLOW -> s.warnFill
+        Intensity.RED -> s.dangerFill
+    }
+}
+
+fun intensityBrush(intensity: Intensity): Brush = when (intensity) {
+    Intensity.GREEN -> SirenGradients.safe
+    Intensity.YELLOW -> SirenGradients.warn
+    Intensity.RED -> SirenGradients.danger
+}
+
+@Composable
+fun IntensityBadge(intensity: Intensity, modifier: Modifier = Modifier) {
+    val c = intensityColor(intensity)
+    Pill(
+        text = "${intensity.severity.uppercase()} · LEVEL ${intensity.level}",
+        fg = c,
+        bg = c.copy(alpha = 0.14f),
+        modifier = modifier,
+    )
+}
+
+// -------------------------------------------------------------------- pieces
+
+@Composable
+fun Avatar(
+    initials: String,
+    modifier: Modifier = Modifier,
+    size: Dp = 42.dp,
+) {
+    Surface(
+        modifier = modifier.size(size),
+        shape = RoundedCornerShape(Layout.tile),
+        color = MaterialTheme.colorScheme.primaryContainer,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                initials,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
 }
+
+/** Numeric readout with tabular figures so values don't jitter as they update. */
+@Composable
+fun StatTile(
+    value: String,
+    label: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(Layout.field),
+        color = color.copy(alpha = 0.10f),
+    ) {
+        Column(
+            Modifier.padding(vertical = Space.m, horizontal = Space.s),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(Space.xxs),
+        ) {
+            Text(value, style = MaterialTheme.typography.headlineSmall.tabular(), color = color)
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+enum class BannerTone { Info, Warn, Danger, Neutral }
+
+@Composable
+fun InfoBanner(
+    text: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    tone: BannerTone = BannerTone.Info,
+) {
+    val s = SirenTheme.status
+    val fg: Color
+    val bg: Color
+    when (tone) {
+        BannerTone.Info -> {
+            fg = MaterialTheme.colorScheme.onPrimaryContainer
+            bg = MaterialTheme.colorScheme.primaryContainer
+        }
+        BannerTone.Warn -> { fg = s.onWarnContainer; bg = s.warnContainer }
+        BannerTone.Danger -> { fg = s.onDangerContainer; bg = s.dangerContainer }
+        BannerTone.Neutral -> {
+            fg = MaterialTheme.colorScheme.onSurfaceVariant
+            bg = MaterialTheme.colorScheme.surfaceContainer
+        }
+    }
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(Layout.field))
+            .background(bg)
+            .padding(Space.m),
+        horizontalArrangement = Arrangement.spacedBy(Space.s),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Icon(icon, null, Modifier.size(18.dp), tint = fg)
+        Text(text, style = MaterialTheme.typography.bodySmall, color = fg)
+    }
+}
+
+@Composable
+fun OfflineBanner(modifier: Modifier = Modifier) {
+    InfoBanner(
+        text = "You're offline. Your response is saved on this device and sent automatically once you reconnect.",
+        icon = Icons.Filled.CloudOff,
+        modifier = modifier,
+        tone = BannerTone.Neutral,
+    )
+}
+
+// -------------------------------------------------------------------- states
+
+@Composable
+fun EmptyState(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(vertical = Space.xxxl, horizontal = Space.xl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(Space.s),
+    ) {
+        Icon(icon, null, Modifier.size(44.dp), tint = MaterialTheme.colorScheme.outline)
+        Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+fun ErrorState(
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    onRetry: (() -> Unit)? = null,
+) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(vertical = Space.xxl, horizontal = Space.xl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(Space.m),
+    ) {
+        Icon(Icons.Filled.CloudOff, null, Modifier.size(40.dp), tint = SirenTheme.status.danger)
+        Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        onRetry?.let { SecondaryButton("Try again", it, Modifier.fillMaxWidth(0.7f), icon = Icons.Filled.Refresh) }
+    }
+}
+
+/** Shimmering placeholder — reads as "loading" far better than a bare spinner. */
+@Composable
+fun Skeleton(
+    modifier: Modifier = Modifier,
+    height: Dp = 16.dp,
+    cornerRadius: Dp = 6.dp,
+) {
+    val transition = rememberInfiniteTransition(label = "skeleton")
+    val alpha by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.75f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "shimmer",
+    )
+    Box(
+        modifier
+            .height(height)
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = alpha))
+            .clearAndSetSemantics { },
+    )
+}
+
+@Composable
+fun SkeletonRow(modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(Space.l),
+        horizontalArrangement = Arrangement.spacedBy(Space.m),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Skeleton(Modifier.size(42.dp), height = 42.dp, cornerRadius = Layout.tile)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space.s)) {
+            Skeleton(Modifier.fillMaxWidth(0.55f))
+            Skeleton(Modifier.fillMaxWidth(0.35f), height = 12.dp)
+        }
+    }
+}
+
+@Composable
+fun SkeletonList(rows: Int = 4, modifier: Modifier = Modifier) {
+    ListGroup(modifier) {
+        repeat(rows) { i ->
+            SkeletonRow()
+            if (i < rows - 1) RowDivider()
+        }
+    }
+}
+
+// -------------------------------------------------------------------- fields
 
 @Composable
 fun SirenField(
@@ -250,97 +604,31 @@ fun SirenField(
     isError: Boolean = false,
 ) {
     var revealed by remember { mutableStateOf(false) }
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(Space.xs)) {
-        SectionLabel(label)
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(Layout.field),
-            singleLine = singleLine,
-            isError = isError,
-            leadingIcon = leadingIcon?.let { { Icon(it, null, tint = InkSubtle) } },
-            trailingIcon = if (isPassword) {
-                {
-                    IconButton(onClick = { revealed = !revealed }) {
-                        Icon(
-                            if (revealed) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                            contentDescription = if (revealed) "Hide password" else "Show password",
-                            tint = InkSubtle,
-                        )
-                    }
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier.fillMaxWidth(),
+        label = { Text(label) },
+        shape = RoundedCornerShape(Layout.field),
+        singleLine = singleLine,
+        isError = isError,
+        leadingIcon = leadingIcon?.let { { Icon(it, null) } },
+        trailingIcon = if (isPassword) {
+            {
+                IconButton(onClick = { revealed = !revealed }) {
+                    Icon(
+                        if (revealed) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                        contentDescription = if (revealed) "Hide password" else "Show password",
+                    )
                 }
-            } else null,
-            visualTransformation = if (isPassword && !revealed) PasswordVisualTransformation()
-            else VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(keyboardType = if (isPassword) KeyboardType.Password else keyboardType),
-            supportingText = supportingText?.let { { Text(it, style = MaterialTheme.typography.bodySmall) } },
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Surface,
-                unfocusedContainerColor = Surface,
-                focusedBorderColor = SirenBlue,
-                unfocusedBorderColor = Border,
-            ),
-        )
-    }
-}
-
-@Composable
-fun InfoBanner(
-    text: String,
-    icon: ImageVector,
-    modifier: Modifier = Modifier,
-    fg: Color = SirenBlue,
-    bg: Color = SurfaceTint,
-) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Layout.field))
-            .background(bg)
-            .padding(Space.m),
-        horizontalArrangement = Arrangement.spacedBy(Space.s),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Icon(icon, null, tint = fg, modifier = Modifier.size(18.dp))
-        Text(text, style = MaterialTheme.typography.bodySmall, color = fg)
-    }
-}
-
-@Composable
-fun EmptyState(
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier.fillMaxWidth().padding(Space.xxl),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Space.s),
-    ) {
-        Icon(icon, null, tint = Border, modifier = Modifier.size(48.dp))
-        Text(title, style = MaterialTheme.typography.titleMedium, color = Ink)
-        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = InkSubtle)
-    }
-}
-
-@Composable
-fun StatTile(
-    value: String,
-    label: String,
-    color: Color,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier
-            .clip(RoundedCornerShape(Layout.field))
-            .background(color.copy(alpha = 0.10f))
-            .padding(vertical = Space.m, horizontal = Space.s),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(value, style = MaterialTheme.typography.headlineSmall, color = color)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = InkSubtle)
-    }
+            }
+        } else null,
+        visualTransformation = if (isPassword && !revealed) PasswordVisualTransformation()
+        else VisualTransformation.None,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = if (isPassword) KeyboardType.Password else keyboardType,
+        ),
+        supportingText = supportingText?.let { { Text(it) } },
+        colors = OutlinedTextFieldDefaults.colors(),
+    )
 }

@@ -35,6 +35,7 @@ import com.siren.mobile.model.AlertRecord
 import com.siren.mobile.model.AlertSource
 import com.siren.mobile.model.ResponseStatus
 import com.siren.mobile.model.SafetyResponse
+import com.siren.mobile.ui.components.BannerTone
 import com.siren.mobile.ui.components.EmptyState
 import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.Pill
@@ -105,8 +106,7 @@ fun HistoryScreen(
                 InfoBanner(
                     "Read-only record · retained for the study's evaluation period.",
                     Icons.Filled.Lock,
-                    fg = InkSubtle,
-                    bg = Border,
+                    tone = BannerTone.Neutral,
                 )
             }
         }

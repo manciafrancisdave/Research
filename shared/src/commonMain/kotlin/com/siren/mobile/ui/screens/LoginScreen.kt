@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.siren.mobile.ui.components.BannerTone
 import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.PrimaryButton
 import com.siren.mobile.ui.components.SirenField
@@ -110,7 +111,7 @@ fun LoginScreen(
         }
 
         if (error != null) {
-            InfoBanner(error, Icons.Filled.Lock, fg = Danger, bg = DangerTint)
+            InfoBanner(error, Icons.Filled.Lock, tone = BannerTone.Danger)
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {

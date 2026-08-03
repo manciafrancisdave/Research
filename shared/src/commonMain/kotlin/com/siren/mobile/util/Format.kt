@@ -1,7 +1,15 @@
 package com.siren.mobile.util
 
+import androidx.compose.ui.text.TextStyle
 import kotlin.math.abs
 import kotlin.math.round
+
+/**
+ * Tabular (monospaced) figures. Applied to any number that updates in place —
+ * magnitudes, roster counts, percentages — so digits don't shift width and make the
+ * layout jitter while an event is live.
+ */
+fun TextStyle.tabular(): TextStyle = copy(fontFeatureSettings = "tnum")
 
 /**
  * `String.format` is JVM-only, so shared code needs its own fixed-decimal formatter.

@@ -148,7 +148,6 @@ fun LiveSafetyDashboardScreen(
                 PrimaryButton(
                     text = "Close this event",
                     onClick = onCloseEvent,
-                    brush = SirenGradients.brand,
                 )
             }
             item {

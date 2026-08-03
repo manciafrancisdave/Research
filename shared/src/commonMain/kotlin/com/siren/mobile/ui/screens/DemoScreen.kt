@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.siren.mobile.model.AlertRecord
 import com.siren.mobile.model.AlertSource
 import com.siren.mobile.model.Intensity
+import com.siren.mobile.ui.components.BannerTone
 import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.Pill
 import com.siren.mobile.ui.components.SectionLabel
@@ -71,8 +72,7 @@ fun DemoScreen(
         InfoBanner(
             "Simulated events are tagged in history and never dispatch SMS to guardians.",
             Icons.Filled.Warning,
-            fg = Warn,
-            bg = WarnTint,
+            tone = BannerTone.Warn,
         )
 
         SectionLabel("Trigger a simulated event")

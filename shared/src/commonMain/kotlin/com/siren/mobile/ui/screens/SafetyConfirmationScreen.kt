@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.siren.mobile.model.AlertRecord
 import com.siren.mobile.model.ResponseStatus
 import com.siren.mobile.model.SafetyResponse
+import com.siren.mobile.ui.components.ButtonTone
 import com.siren.mobile.ui.components.Haptics
 import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.Pill
@@ -112,7 +113,7 @@ fun SafetyConfirmationScreen(
                     onRespond(ResponseStatus.SAFE)
                 },
                 icon = Icons.Filled.CheckCircle,
-                brush = SirenGradients.safe,
+                tone = ButtonTone.Safe,
             )
             PrimaryButton(
                 text = "I Need Help",
@@ -121,7 +122,7 @@ fun SafetyConfirmationScreen(
                     onRespond(ResponseStatus.NEEDS_HELP)
                 },
                 icon = Icons.Filled.Sos,
-                brush = SirenGradients.danger,
+                tone = ButtonTone.Danger,
             )
         } else {
             val safe = myResponse.status == ResponseStatus.SAFE
@@ -185,7 +186,7 @@ fun SafetyConfirmationScreen(
                             onRespond(ResponseStatus.NEEDS_HELP)
                         },
                         icon = Icons.Filled.Sos,
-                        brush = SirenGradients.danger,
+                        tone = ButtonTone.Danger,
                     )
                 }
             }

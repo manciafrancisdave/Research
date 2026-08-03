@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.siren.mobile.model.Role
+import com.siren.mobile.ui.components.BannerTone
 import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.PrimaryButton
 import com.siren.mobile.ui.components.SirenField
@@ -69,7 +70,7 @@ fun SignUpScreen(
         )
 
         if (error != null) {
-            InfoBanner(error, Icons.Filled.Warning, fg = Danger, bg = DangerTint)
+            InfoBanner(error, Icons.Filled.Warning, tone = BannerTone.Danger)
         }
 
         SirenField(

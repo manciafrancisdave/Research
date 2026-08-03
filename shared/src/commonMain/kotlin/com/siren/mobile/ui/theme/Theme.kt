@@ -34,6 +34,13 @@ data class StatusColors(
     val safeFill: Color,
     val warnFill: Color,
     val dangerFill: Color,
+    /**
+     * The "sensor console" panel at the top of each dashboard. A solid deep surface
+     * rather than a gradient, so gradients stay reserved for seismic intensity.
+     */
+    val hero: Color,
+    val onHero: Color,
+    val onHeroMuted: Color,
 )
 
 private val LightStatus = StatusColors(
@@ -41,6 +48,7 @@ private val LightStatus = StatusColors(
     warn = WarnText, warnContainer = WarnTint, onWarnContainer = Color(0xFF432B04),
     danger = DangerText, dangerContainer = DangerTint, onDangerContainer = Color(0xFF4C0F0F),
     safeFill = SafeFill, warnFill = WarnFill, dangerFill = DangerFill,
+    hero = Navy, onHero = Color.White, onHeroMuted = Color(0xFFA8B4C8),
 )
 
 private val DarkStatus = StatusColors(
@@ -48,6 +56,7 @@ private val DarkStatus = StatusColors(
     warn = WarnOnDark, warnContainer = Color(0xFF3A2B0A), onWarnContainer = Color(0xFFFCE7B0),
     danger = DangerOnDark, dangerContainer = Color(0xFF3B1618), onDangerContainer = Color(0xFFFFD2D2),
     safeFill = SafeOnDark, warnFill = WarnOnDark, dangerFill = DangerOnDark,
+    hero = DarkSurfaceContainerHigh, onHero = DarkInk, onHeroMuted = DarkInkSubtle,
 )
 
 private val LocalStatusColors = staticCompositionLocalOf { LightStatus }

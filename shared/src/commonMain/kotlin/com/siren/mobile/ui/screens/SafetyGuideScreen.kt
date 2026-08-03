@@ -1,39 +1,31 @@
 package com.siren.mobile.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import org.jetbrains.compose.resources.DrawableResource
-import org.jetbrains.compose.resources.painterResource
 import androidx.compose.ui.unit.dp
 import com.siren.mobile.resources.*
 import com.siren.mobile.ui.components.InfoBanner
+import com.siren.mobile.ui.components.ListGroup
+import com.siren.mobile.ui.components.ListRow
+import com.siren.mobile.ui.components.RowDivider
 import com.siren.mobile.ui.components.SectionLabel
-import com.siren.mobile.ui.theme.Ink
-import com.siren.mobile.ui.theme.InkSubtle
 import com.siren.mobile.ui.theme.Layout
-import com.siren.mobile.ui.theme.SirenBlue
 import com.siren.mobile.ui.theme.Space
-import com.siren.mobile.ui.theme.Surface
-import com.siren.mobile.ui.theme.SurfaceTint
+import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.painterResource
 
 data class GuideItem(val icon: DrawableResource, val title: String, val body: String)
 data class GuideSection(val title: String, val items: List<GuideItem>)
@@ -110,7 +102,7 @@ fun SafetyGuideScreen(onBack: () -> Unit) {
         contentPadding = PaddingValues(
             start = Layout.screenPadding,
             end = Layout.screenPadding,
-            bottom = Space.xxl,
+            bottom = Space.xxxl,
         ),
         verticalArrangement = Arrangement.spacedBy(Space.m),
     ) {
@@ -125,39 +117,38 @@ fun SafetyGuideScreen(onBack: () -> Unit) {
 
         guideSections.forEach { section ->
             item { SectionLabel(section.title) }
-            items(section.items, key = { it.title }) { item -> GuideRow(item) }
+            item {
+                ListGroup {
+                    section.items.forEachIndexed { i, guide ->
+                        GuideRow(guide)
+                        if (i < section.items.lastIndex) RowDivider()
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun GuideRow(item: GuideItem) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Layout.card))
-            .background(Surface)
-            .padding(Space.m),
-        horizontalArrangement = Arrangement.spacedBy(Space.m),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Box(
-            Modifier
-                .size(46.dp)
-                .clip(RoundedCornerShape(Layout.tile))
-                .background(SurfaceTint),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(item.icon),
-                contentDescription = null,
-                tint = SirenBlue,
-                modifier = Modifier.size(26.dp),
-            )
-        }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(item.title, style = MaterialTheme.typography.titleMedium, color = Ink)
-            Text(item.body, style = MaterialTheme.typography.bodySmall, color = InkSubtle)
-        }
-    }
+    ListRow(
+        title = item.title,
+        subtitle = item.body,
+        leading = {
+            Surface(
+                shape = RoundedCornerShape(Layout.tile),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(40.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        painter = painterResource(item.icon),
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+            }
+        },
+    )
 }

@@ -1,9 +1,6 @@
 package com.siren.mobile.ui.screens
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,13 +11,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,23 +26,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role as SemanticsRole
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.siren.mobile.model.Role
 import com.siren.mobile.ui.components.PrimaryButton
-import com.siren.mobile.ui.theme.Border
-import com.siren.mobile.ui.theme.Ink
-import com.siren.mobile.ui.theme.InkMuted
-import com.siren.mobile.ui.theme.InkSubtle
 import com.siren.mobile.ui.theme.Layout
-import com.siren.mobile.ui.theme.SirenBlue
 import com.siren.mobile.ui.theme.Space
-import com.siren.mobile.ui.theme.Surface
-import com.siren.mobile.ui.theme.SurfaceTint
 
 /**
  * Prototype screen 03. The role is chosen before the account exists, so it can be
@@ -67,32 +58,33 @@ fun RoleSelectionScreen(
         ScreenHeader(title = "Choose your role", onBack = onBack)
 
         Text(
-            "Your role determines the alerts you receive and the actions you can take.",
+            "This decides which alerts you receive and what you can do during an event. You can change it later in Settings.",
             style = MaterialTheme.typography.bodyMedium,
-            color = InkSubtle,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+
+        Box(Modifier.padding(top = Space.xs))
 
         RoleCard(
             icon = Icons.Filled.School,
             title = "Student",
             blurb = "Receive alerts and confirm your safety status.",
             selected = selected == Role.STUDENT,
-            onClick = { selected = Role.STUDENT },
-        )
+        ) { selected = Role.STUDENT }
+
         RoleCard(
             icon = Icons.Filled.Groups,
             title = "Teacher / School Admin",
-            blurb = "Monitor your class roster in real time and run drills.",
+            blurb = "Monitor your class roster in real time and close events.",
             selected = selected == Role.TEACHER,
-            onClick = { selected = Role.TEACHER },
-        )
+        ) { selected = Role.TEACHER }
+
         RoleCard(
             icon = Icons.Filled.FamilyRestroom,
             title = "Parent / Guardian",
-            blurb = "Track the safety status of linked children.",
+            blurb = "Follow the safety status of your linked children.",
             selected = selected == Role.PARENT,
-            onClick = { selected = Role.PARENT },
-        )
+        ) { selected = Role.PARENT }
 
         Box(Modifier.weight(1f))
 
@@ -101,13 +93,13 @@ fun RoleSelectionScreen(
             onClick = { onContinue(selected) },
         )
         Text(
-            "You can switch roles later in Settings.",
+            "Your role is saved to your account when you sign up.",
             style = MaterialTheme.typography.labelSmall,
-            color = InkSubtle,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = Space.xl),
+                .padding(top = Space.s, bottom = Space.xl),
         )
     }
 }
@@ -120,69 +112,77 @@ private fun RoleCard(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    Row(
-        Modifier
+    Surface(
+        onClick = onClick,
+        // Announced as a radio button so screen readers convey this is a choice.
+        modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(Layout.card))
-            .background(if (selected) SurfaceTint else Surface)
-            .border(
-                BorderStroke(if (selected) 2.dp else 1.dp, if (selected) SirenBlue else Border),
-                RoundedCornerShape(Layout.card),
-            )
-            .clickable { onClick() }
-            .padding(Space.l),
-        horizontalArrangement = Arrangement.spacedBy(Space.m),
-        verticalAlignment = Alignment.CenterVertically,
+            .semantics {
+                this.selected = selected
+                this.role = SemanticsRole.RadioButton
+            },
+        shape = RoundedCornerShape(Layout.card),
+        color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        border = BorderStroke(
+            width = if (selected) 2.dp else Layout.hairline,
+            color = if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.outlineVariant
+            },
+        ),
     ) {
-        Box(
-            Modifier
-                .size(52.dp)
-                .clip(RoundedCornerShape(Layout.field))
-                .background(if (selected) SirenBlue else SurfaceTint),
-            contentAlignment = Alignment.Center,
+        Row(
+            Modifier.padding(Space.l),
+            horizontalArrangement = Arrangement.spacedBy(Space.m),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(icon, null, tint = if (selected) Color.White else SirenBlue, modifier = Modifier.size(28.dp))
+            Surface(
+                shape = RoundedCornerShape(Layout.field),
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                },
+                modifier = Modifier.size(48.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        Modifier.size(24.dp),
+                        tint = if (selected) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space.xxs)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    blurb,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (selected) {
+                Icon(
+                    Icons.Filled.CheckCircle,
+                    contentDescription = "Selected",
+                    Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = Ink)
-            Text(blurb, style = MaterialTheme.typography.bodySmall, color = InkMuted)
-        }
-        if (selected) {
-            Icon(Icons.Filled.CheckCircle, null, tint = SirenBlue, modifier = Modifier.size(26.dp))
-        }
-    }
-}
-
-@Composable
-fun ScreenHeader(
-    title: String,
-    onBack: (() -> Unit)? = null,
-    trailing: @Composable (() -> Unit)? = null,
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(vertical = Space.m),
-        horizontalArrangement = Arrangement.spacedBy(Space.m),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (onBack != null) {
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
-                tint = Ink,
-                modifier = Modifier
-                    .size(24.dp)
-                    .clickable { onBack() },
-            )
-        }
-        Text(
-            title,
-            style = MaterialTheme.typography.titleLarge,
-            color = Ink,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f),
-        )
-        trailing?.invoke()
     }
 }

@@ -1,25 +1,25 @@
 package com.siren.mobile.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.ContactEmergency
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -28,26 +28,23 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.siren.mobile.model.EmergencyContact
 import com.siren.mobile.platform.Platform
 import com.siren.mobile.ui.components.Avatar
+import com.siren.mobile.ui.components.EmptyState
 import com.siren.mobile.ui.components.InfoBanner
+import com.siren.mobile.ui.components.ListGroup
+import com.siren.mobile.ui.components.ListRow
 import com.siren.mobile.ui.components.Pill
-import com.siren.mobile.ui.components.PrimaryButton
+import com.siren.mobile.ui.components.RowDivider
 import com.siren.mobile.ui.components.SirenField
-import com.siren.mobile.ui.theme.Border
-import com.siren.mobile.ui.theme.Ink
-import com.siren.mobile.ui.theme.InkSubtle
 import com.siren.mobile.ui.theme.Layout
-import com.siren.mobile.ui.theme.SirenBlue
+import com.siren.mobile.ui.theme.SirenTheme
 import com.siren.mobile.ui.theme.Space
-import com.siren.mobile.ui.theme.Surface
-import com.siren.mobile.ui.theme.SurfaceTint
+import com.siren.mobile.util.initials
 
 /**
  * Prototype screen 13. Mirrors the hardware's SMS fallback list, so contacts are still
@@ -63,93 +60,59 @@ fun EmergencyContactsScreen(
     onBack: () -> Unit,
 ) {
     var adding by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<EmergencyContact?>(null) }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = Layout.screenPadding),
+    LazyColumn(
+        Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(
+            start = Layout.screenPadding,
+            end = Layout.screenPadding,
+            bottom = Space.xxxl,
+        ),
         verticalArrangement = Arrangement.spacedBy(Space.m),
     ) {
-        ScreenHeader(
-            title = "Emergency contacts",
-            onBack = onBack,
-            trailing = {
-                Icon(
-                    Icons.Filled.Add,
-                    contentDescription = "Add contact",
-                    tint = SirenBlue,
-                    modifier = Modifier.clickable { adding = true },
-                )
-            },
-        )
+        item {
+            ScreenHeader(
+                title = "Emergency contacts",
+                onBack = onBack,
+                trailing = {
+                    IconButton(onClick = { adding = true }) {
+                        Icon(Icons.Filled.Add, contentDescription = "Add contact")
+                    }
+                },
+            )
+        }
 
-        InfoBanner(
-            "SMS fallback is active — alerts still reach these contacts without internet.",
-            Icons.Filled.Sms,
-        )
+        item {
+            InfoBanner(
+                "SMS fallback is active — these contacts are still reached when there is no internet.",
+                Icons.Filled.Sms,
+            )
+        }
 
         if (contacts.isEmpty()) {
-            Text(
-                "No contacts saved yet. Add at least one guardian or responder.",
-                style = MaterialTheme.typography.bodySmall,
-                color = InkSubtle,
-            )
+            item {
+                EmptyState(
+                    title = "No contacts saved",
+                    subtitle = "Add at least one guardian or responder so alerts can reach someone offline.",
+                    icon = Icons.Filled.ContactEmergency,
+                )
+            }
         } else {
-            contacts.forEach { contact ->
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(Layout.card))
-                        .background(Surface)
-                        .padding(Space.m),
-                    verticalArrangement = Arrangement.spacedBy(Space.s),
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(Space.m),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Avatar(
-                            contact.name.trim().split(" ")
-                                .filter { it.isNotEmpty() }
-                                .take(2)
-                                .joinToString("") { it.first().uppercase() }
-                                .ifEmpty { "?" },
-                            size = 40.dp,
+            item {
+                ListGroup {
+                    contacts.forEachIndexed { i, contact ->
+                        ContactRow(
+                            contact = contact,
+                            onCall = { onCall(contact.phone) },
+                            onText = { onText(contact.phone) },
+                            onDelete = { pendingDelete = contact },
                         )
-                        Column(Modifier.weight(1f)) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(Space.s),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(contact.name, style = MaterialTheme.typography.titleMedium, color = Ink)
-                                if (contact.primary) Pill("PRIMARY", SirenBlue, SurfaceTint)
-                            }
-                            Text(
-                                "${contact.relation} · ${contact.phone}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = InkSubtle,
-                            )
-                        }
-                        Icon(
-                            Icons.Filled.Delete,
-                            contentDescription = "Remove",
-                            tint = InkSubtle,
-                            modifier = Modifier
-                                .size(20.dp)
-                                .clickable { onRemove(contact.id) },
-                        )
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
-                        ContactAction("Quick call", Icons.Filled.Call, Modifier.weight(1f)) { onCall(contact.phone) }
-                        ContactAction("Text", Icons.Filled.Sms, Modifier.weight(1f)) { onText(contact.phone) }
+                        if (i < contacts.lastIndex) RowDivider()
                     }
                 }
             }
         }
-
-        Box(Modifier.padding(bottom = Space.xxl))
     }
 
     if (adding) {
@@ -161,27 +124,85 @@ fun EmergencyContactsScreen(
             },
         )
     }
+
+    pendingDelete?.let { contact ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Remove ${contact.name}?") },
+            text = { Text("They will no longer receive SMS fallback alerts from this device.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onRemove(contact.id)
+                    pendingDelete = null
+                }) { Text("Remove") }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } },
+        )
+    }
 }
 
 @Composable
-private fun ContactAction(
-    label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
+private fun ContactRow(
+    contact: EmergencyContact,
+    onCall: () -> Unit,
+    onText: () -> Unit,
+    onDelete: () -> Unit,
 ) {
-    Row(
-        modifier
-            .clip(RoundedCornerShape(Layout.field))
-            .background(SurfaceTint)
-            .clickable { onClick() }
-            .padding(vertical = Space.s),
-        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, null, tint = SirenBlue, modifier = Modifier.size(16.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, color = SirenBlue)
-    }
+    var menuOpen by remember { mutableStateOf(false) }
+
+    ListRow(
+        title = contact.name,
+        subtitle = "${contact.relation} · ${contact.phone}",
+        onClick = onCall,
+        leading = { Avatar(contact.name.initials(), size = 40.dp) },
+        trailing = {
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                if (contact.primary) {
+                    Pill(
+                        "PRIMARY",
+                        MaterialTheme.colorScheme.onPrimaryContainer,
+                        MaterialTheme.colorScheme.primaryContainer,
+                    )
+                }
+                IconButton(onClick = onCall) {
+                    Icon(
+                        Icons.Filled.Call,
+                        contentDescription = "Call ${contact.name}",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "More options for ${contact.name}")
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Send a text") },
+                            leadingIcon = { Icon(Icons.Filled.Sms, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                onText()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Remove", color = SirenTheme.status.danger) },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Filled.Delete,
+                                    contentDescription = null,
+                                    tint = SirenTheme.status.danger,
+                                )
+                            },
+                            onClick = {
+                                menuOpen = false
+                                onDelete()
+                            },
+                        )
+                    }
+                }
+            }
+        },
+    )
 }
 
 @Composable

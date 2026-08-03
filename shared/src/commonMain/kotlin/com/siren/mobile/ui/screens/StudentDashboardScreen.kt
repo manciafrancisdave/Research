@@ -1,12 +1,14 @@
 package com.siren.mobile.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,10 +24,11 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,23 +40,28 @@ import com.siren.mobile.model.AlertRecord
 import com.siren.mobile.model.ResponseStatus
 import com.siren.mobile.model.SafetyResponse
 import com.siren.mobile.model.UserProfile
-import com.siren.mobile.ui.components.Avatar
+import com.siren.mobile.platform.Platform
+import com.siren.mobile.ui.components.EmptyState
+import com.siren.mobile.ui.components.ListGroup
+import com.siren.mobile.ui.components.ListRow
+import com.siren.mobile.ui.components.OfflineBanner
 import com.siren.mobile.ui.components.Pill
-import com.siren.mobile.ui.components.SectionLabel
+import com.siren.mobile.ui.components.RowDivider
+import com.siren.mobile.ui.components.SectionHeader
+import com.siren.mobile.ui.components.SkeletonList
+import com.siren.mobile.ui.components.StatusChip
+import com.siren.mobile.ui.components.intensityBrush
 import com.siren.mobile.ui.components.intensityColor
+import com.siren.mobile.ui.theme.Layout
+import com.siren.mobile.ui.theme.SirenTheme
+import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.util.DateFmt
 import com.siren.mobile.util.asG
-import com.siren.mobile.ui.theme.Border
-import com.siren.mobile.ui.theme.Ink
-import com.siren.mobile.ui.theme.InkSubtle
-import com.siren.mobile.ui.theme.Layout
-import com.siren.mobile.ui.theme.Safe
-import com.siren.mobile.ui.theme.SafeTint
-import com.siren.mobile.ui.theme.SirenBlue
-import com.siren.mobile.ui.theme.SirenGradients
-import com.siren.mobile.ui.theme.Space
-import com.siren.mobile.ui.theme.Surface
-import com.siren.mobile.ui.theme.SurfaceTint
+import com.siren.mobile.util.asGSpaced
+import com.siren.mobile.util.tabular
+
+/** Anything older than this stops dominating the home screen. */
+private const val ACTIVE_WINDOW_MS = 60L * 60L * 1000L
 
 /** Prototype screen 05. */
 @Composable
@@ -62,6 +70,7 @@ fun StudentDashboardScreen(
     alerts: List<AlertRecord>,
     myResponses: Map<String, SafetyResponse>,
     online: Boolean,
+    loading: Boolean,
     onOpenHistory: () -> Unit,
     onOpenContacts: () -> Unit,
     onOpenDemo: () -> Unit,
@@ -70,95 +79,127 @@ fun StudentDashboardScreen(
     onOpenAlert: (AlertRecord) -> Unit,
 ) {
     val latest = alerts.firstOrNull()
+    val active = latest != null &&
+        !latest.closed &&
+        (Platform.services.nowMillis() - latest.detectedAt) < ACTIVE_WINDOW_MS
 
     LazyColumn(
         Modifier.fillMaxWidth(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+        contentPadding = PaddingValues(
             start = Layout.screenPadding,
             end = Layout.screenPadding,
-            bottom = Space.xxl,
+            bottom = Space.xxxl,
         ),
         verticalArrangement = Arrangement.spacedBy(Space.l),
     ) {
         item {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = Space.m),
-                horizontalArrangement = Arrangement.spacedBy(Space.m),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Avatar(user.initials)
-                Column(Modifier.weight(1f)) {
-                    Text("Good day,", style = MaterialTheme.typography.bodySmall, color = InkSubtle)
-                    Text(
-                        user.name.ifBlank { "Student" },
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Ink,
-                        fontWeight = FontWeight.Bold,
-                    )
+            DashboardHeader(
+                initials = user.initials,
+                eyebrow = listOfNotNull("Student", user.classId.ifBlank { null }).joinToString(" · "),
+                name = user.name.ifBlank { "Student" },
+                trailing = {
+                    IconButton(onClick = onOpenHistory) {
+                        Icon(Icons.Filled.Notifications, contentDescription = "Alert history")
+                    }
+                },
+            )
+        }
+
+        if (!online) {
+            item { OfflineBanner() }
+        }
+
+        item {
+            StatusPanel(
+                latest = latest,
+                active = active,
+                online = online,
+                myResponse = latest?.let { myResponses[it.id] },
+                onRespond = { latest?.let(onOpenAlert) },
+            )
+        }
+
+        item {
+            ListGroup {
+                ActionRow(Icons.Filled.History, "Alert history", alertCountLabel(alerts.size), onOpenHistory)
+                RowDivider()
+                ActionRow(Icons.Filled.MenuBook, "Safety guide", "Drop, cover, hold and 27 more", onOpenGuide)
+                RowDivider()
+                ActionRow(Icons.Filled.ContactEmergency, "Emergency contacts", "Reachable without internet", onOpenContacts)
+                RowDivider()
+                ActionRow(Icons.Filled.Science, "Demo mode", "Simulate an alert level", onOpenDemo, badge = "DEV")
+                RowDivider()
+                ActionRow(Icons.Filled.Settings, "Settings", "Alerts, account, privacy", onOpenSettings)
+            }
+        }
+
+        item {
+            SectionHeader(
+                title = "Recent alerts",
+                actionLabel = if (alerts.isNotEmpty()) "See all" else null,
+                onAction = if (alerts.isNotEmpty()) onOpenHistory else null,
+            )
+        }
+
+        when {
+            loading -> item { SkeletonList(rows = 3) }
+
+            alerts.isEmpty() -> item {
+                EmptyState(
+                    title = "No events recorded",
+                    subtitle = "Alerts from the campus sensor will appear here.",
+                    icon = Icons.Filled.VerifiedUser,
+                )
+            }
+
+            else -> item {
+                ListGroup {
+                    val recent = alerts.take(4)
+                    recent.forEachIndexed { i, alert ->
+                        AlertRow(alert, myResponses[alert.id]) { onOpenAlert(alert) }
+                        if (i < recent.lastIndex) RowDivider()
+                    }
                 }
-                Icon(Icons.Filled.Notifications, null, tint = Ink)
-            }
-        }
-
-        item {
-            SystemStatusCard(latest = latest, online = online)
-        }
-
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
-                QuickTile(Icons.Filled.History, "Alert History", "${alerts.size} recorded events", onOpenHistory)
-                QuickTile(Icons.Filled.MenuBook, "Safety Guide", "Drop, cover, hold and 27 more", onOpenGuide)
-                QuickTile(Icons.Filled.ContactEmergency, "Emergency Contacts", "SMS fallback when offline", onOpenContacts)
-                QuickTile(Icons.Filled.Science, "Demo Mode", "Simulate alert levels", onOpenDemo, badge = "DEV")
-                QuickTile(Icons.Filled.Settings, "Settings", "Alerts, account, privacy", onOpenSettings)
-            }
-        }
-
-        item {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                SectionLabel("Recent alerts")
-                Text(
-                    "See all",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = SirenBlue,
-                    modifier = Modifier.clickable { onOpenHistory() },
-                )
-            }
-        }
-
-        if (alerts.isEmpty()) {
-            item {
-                Text(
-                    "No seismic events recorded yet.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = InkSubtle,
-                )
-            }
-        } else {
-            items(alerts.take(5), key = { it.id }) { alert ->
-                RecentAlertRow(
-                    alert = alert,
-                    response = myResponses[alert.id],
-                    onClick = { onOpenAlert(alert) },
-                )
             }
         }
     }
 }
 
+private fun alertCountLabel(count: Int): String = when (count) {
+    0 -> "No events yet"
+    1 -> "1 recorded event"
+    else -> "$count recorded events"
+}
+
+/**
+ * The one element on the screen that should dominate. It changes meaning with state:
+ * a calm console when nothing is happening, the intensity gradient when an event is
+ * live — which is why gradients are reserved for intensity everywhere else.
+ */
 @Composable
-private fun SystemStatusCard(latest: AlertRecord?, online: Boolean) {
+private fun StatusPanel(
+    latest: AlertRecord?,
+    active: Boolean,
+    online: Boolean,
+    myResponse: SafetyResponse?,
+    onRespond: () -> Unit,
+) {
+    val status = SirenTheme.status
+    val shape = RoundedCornerShape(Layout.cardLarge)
+
+    val bgModifier = if (active && latest != null) {
+        Modifier.background(intensityBrush(latest.intensity))
+    } else {
+        Modifier.background(status.hero)
+    }
+    val onColor = if (active) Color.White else status.onHero
+    val onColorMuted = if (active) Color.White.copy(alpha = 0.82f) else status.onHeroMuted
+
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(Layout.cardLarge))
-            .background(SirenGradients.night)
+            .clip(shape)
+            .then(bgModifier)
             .padding(Space.l),
         verticalArrangement = Arrangement.spacedBy(Space.m),
     ) {
@@ -168,142 +209,173 @@ private fun SystemStatusCard(latest: AlertRecord?, online: Boolean) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "System status",
+                if (active) "Active event" else "System status",
                 style = MaterialTheme.typography.labelMedium,
-                color = Color.White.copy(alpha = 0.7f),
+                color = onColorMuted,
             )
             Pill(
-                text = if (online) "MONITORING" else "OFFLINE",
-                fg = if (online) Safe else Color.White,
-                bg = Color.White.copy(alpha = 0.16f),
+                text = when {
+                    !online -> "OFFLINE"
+                    active -> "LIVE"
+                    else -> "MONITORING"
+                },
+                fg = onColor,
+                bg = Color.White.copy(alpha = 0.18f),
             )
         }
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(Space.m),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Filled.VerifiedUser,
-                null,
-                tint = Safe,
-                modifier = Modifier.size(38.dp),
+        if (active && latest != null) {
+            Text(
+                latest.intensity.severity.uppercase() + " · LEVEL " + latest.intensity.level,
+                style = MaterialTheme.typography.labelLarge,
+                color = onColor,
+                fontWeight = FontWeight.Bold,
             )
-            Column {
-                Text(
-                    "All Safe",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = Color.White,
+            Text(
+                latest.magnitudeG.asGSpaced(),
+                style = MaterialTheme.typography.displaySmall.tabular(),
+                color = onColor,
+            )
+            Text(
+                "Detected ${DateFmt.clock(latest.detectedAt)} · ${latest.nodeId ?: latest.source.label}",
+                style = MaterialTheme.typography.bodySmall,
+                color = onColorMuted,
+            )
+
+            Spacer(Modifier.height(Space.xs))
+            if (myResponse == null) {
+                com.siren.mobile.ui.components.PrimaryButton(
+                    text = "Confirm your status",
+                    onClick = onRespond,
+                    tone = com.siren.mobile.ui.components.ButtonTone.OnColor,
+                    onColorContent = intensityColor(latest.intensity),
                 )
-                Text(
-                    if (online) "No seismic activity · sensor online"
-                    else "Waiting for connection · queued locally",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.7f),
-                )
+            } else {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Space.s),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    StatusChip(myResponse.status)
+                    Text(
+                        "Recorded ${DateFmt.clock(myResponse.respondedAt)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = onColorMuted,
+                    )
+                }
             }
+        } else {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Space.m),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Filled.VerifiedUser,
+                    contentDescription = null,
+                    Modifier.size(36.dp),
+                    tint = status.safeFill,
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(Space.xxs)) {
+                    Text(
+                        "All clear",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = onColor,
+                    )
+                    Text(
+                        if (online) "No seismic activity · sensor online"
+                        else "Showing last known status",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = onColorMuted,
+                    )
+                }
+            }
+            Text(
+                latest?.let { "Last reading ${it.magnitudeG.asG()} · ${DateFmt.shortDateTime(it.detectedAt)}" }
+                    ?: "Awaiting the first sensor report",
+                style = MaterialTheme.typography.labelSmall.tabular(),
+                color = onColorMuted,
+            )
         }
-
-        Text(
-            latest?.let {
-                "Peak ${it.magnitudeG.asG()} · ${it.nodeId ?: it.source.label}"
-            } ?: "No readings yet · awaiting first sensor report",
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(alpha = 0.55f),
-        )
     }
 }
 
 @Composable
-private fun QuickTile(
+private fun ActionRow(
     icon: ImageVector,
     title: String,
     subtitle: String,
     onClick: () -> Unit,
     badge: String? = null,
 ) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Layout.card))
-            .background(Surface)
-            .clickable { onClick() }
-            .padding(Space.m),
-        horizontalArrangement = Arrangement.spacedBy(Space.m),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier
-                .size(42.dp)
-                .clip(RoundedCornerShape(Layout.tile))
-                .background(SurfaceTint),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, null, tint = SirenBlue, modifier = Modifier.size(22.dp))
-        }
-        Column(Modifier.weight(1f)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(Space.s), verticalAlignment = Alignment.CenterVertically) {
-                Text(title, style = MaterialTheme.typography.titleMedium, color = Ink)
-                badge?.let { Pill(it, SirenBlue, SurfaceTint) }
+    ListRow(
+        title = title,
+        subtitle = subtitle,
+        onClick = onClick,
+        leading = {
+            Surface(
+                shape = RoundedCornerShape(Layout.tile),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(40.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
             }
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = InkSubtle)
-        }
-    }
+        },
+        trailing = badge?.let {
+            {
+                Pill(
+                    it,
+                    MaterialTheme.colorScheme.onPrimaryContainer,
+                    MaterialTheme.colorScheme.primaryContainer,
+                )
+            }
+        },
+    )
 }
 
 @Composable
-fun RecentAlertRow(
+private fun AlertRow(
     alert: AlertRecord,
     response: SafetyResponse?,
     onClick: () -> Unit,
 ) {
-    val when_ = remember(alert.detectedAt) { DateFmt.shortDateTime(alert.detectedAt) }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Layout.card))
-            .background(Surface)
-            .clickable { onClick() }
-            .padding(Space.m),
-        horizontalArrangement = Arrangement.spacedBy(Space.m),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier
-                .size(42.dp)
-                .clip(RoundedCornerShape(Layout.tile))
-                .background(intensityColor(alert.intensity).copy(alpha = 0.14f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                Icons.Filled.Warning,
-                null,
-                tint = intensityColor(alert.intensity),
-                modifier = Modifier.size(22.dp),
-            )
-        }
-        Column(Modifier.weight(1f)) {
-            Text(
-                "${alert.intensity.severity} shaking · ${alert.magnitudeG.asG()}",
-                style = MaterialTheme.typography.titleMedium,
-                color = Ink,
-            )
-            Text(
-                buildString {
-                    append(when_)
-                    response?.let {
-                        append(" · you replied ")
-                        append(if (it.status == ResponseStatus.SAFE) "Safe" else "Needs help")
-                    }
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = InkSubtle,
-            )
-        }
-        if (alert.source.name == "SIMULATED") {
-            Pill("SIM", InkSubtle, Border)
-        } else if (response?.status == ResponseStatus.SAFE) {
-            Pill("Safe", Safe, SafeTint)
-        }
-    }
+    val tint = intensityColor(alert.intensity)
+    ListRow(
+        title = "${alert.intensity.severity} · ${alert.magnitudeG.asG()}",
+        subtitle = buildString {
+            append(DateFmt.shortDateTime(alert.detectedAt))
+            response?.let {
+                append(" · you replied ")
+                append(if (it.status == ResponseStatus.SAFE) "Safe" else "Needs help")
+            }
+        },
+        onClick = onClick,
+        leading = {
+            Surface(
+                shape = RoundedCornerShape(Layout.tile),
+                color = tint.copy(alpha = 0.14f),
+                modifier = Modifier.size(40.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Warning, contentDescription = null, Modifier.size(20.dp), tint = tint)
+                }
+            }
+        },
+        trailing = {
+            if (alert.source.name == "SIMULATED") {
+                Pill(
+                    "DEMO",
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                    MaterialTheme.colorScheme.surfaceContainerHigh,
+                )
+            } else {
+                response?.let { StatusChip(it.status) }
+            }
+        },
+    )
 }

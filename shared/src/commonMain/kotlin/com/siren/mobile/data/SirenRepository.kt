@@ -64,6 +64,11 @@ object SirenRepository {
     private val _alerts = MutableStateFlow<List<AlertRecord>>(emptyList())
     val alerts: StateFlow<List<AlertRecord>> = _alerts.asStateFlow()
 
+    /** False until the first alerts snapshot lands, so screens can show skeletons
+     *  instead of flashing an "empty" state at a user who is simply still loading. */
+    private val _alertsLoaded = MutableStateFlow(false)
+    val alertsLoaded: StateFlow<Boolean> = _alertsLoaded.asStateFlow()
+
     private val _myResponses = MutableStateFlow<Map<String, SafetyResponse>>(emptyMap())
     val myResponses: StateFlow<Map<String, SafetyResponse>> = _myResponses.asStateFlow()
 
@@ -276,6 +281,7 @@ object SirenRepository {
                         }.getOrNull()
                     }
                     _alerts.value = list
+                    _alertsLoaded.value = true
 
                     // Don't replay the whole backlog as "new" on first attach.
                     val newest = list.firstOrNull()
@@ -446,6 +452,7 @@ object SirenRepository {
         rosterRespJob?.cancel(); rosterRespJob = null
         currentRosterAlertId = null
         alertsInitialised = false
+        _alertsLoaded.value = false
         lastIncomingId = null
         rosterMembers = emptyList()
         rosterResponses = emptyList()

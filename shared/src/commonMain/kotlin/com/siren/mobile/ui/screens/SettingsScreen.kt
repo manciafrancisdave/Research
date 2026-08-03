@@ -1,7 +1,5 @@
 package com.siren.mobile.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +25,8 @@ import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -37,24 +37,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.siren.mobile.model.Role
 import com.siren.mobile.model.SirenSettings
 import com.siren.mobile.model.UserProfile
 import com.siren.mobile.ui.components.Avatar
-import com.siren.mobile.ui.components.InfoBanner
+import com.siren.mobile.ui.components.ListGroup
+import com.siren.mobile.ui.components.ListRow
+import com.siren.mobile.ui.components.RowDivider
 import com.siren.mobile.ui.components.SectionLabel
-import com.siren.mobile.ui.theme.Danger
-import com.siren.mobile.ui.theme.Ink
-import com.siren.mobile.ui.theme.InkSubtle
 import com.siren.mobile.ui.theme.Layout
-import com.siren.mobile.ui.theme.SirenBlue
+import com.siren.mobile.ui.theme.SirenTheme
 import com.siren.mobile.ui.theme.Space
-import com.siren.mobile.ui.theme.Surface
-import com.siren.mobile.ui.theme.SurfaceTint
+import com.siren.mobile.util.tabular
 
 /** Prototype screen 14. */
 @Composable
@@ -80,108 +79,120 @@ fun SettingsScreen(
     ) {
         ScreenHeader(title = "Settings", onBack = onBack)
 
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(Layout.card))
-                .background(Surface)
-                .padding(Space.m),
-            horizontalArrangement = Arrangement.spacedBy(Space.m),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Avatar(user.initials)
-            Column(Modifier.weight(1f)) {
-                Text(
-                    user.name.ifBlank { "Unnamed" },
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Ink,
-                )
-                Text(
-                    listOfNotNull(user.role.label, user.classId.ifBlank { null }).joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = InkSubtle,
-                )
-            }
-            Icon(Icons.Filled.ChevronRight, null, tint = InkSubtle)
+        ListGroup {
+            ListRow(
+                title = user.name.ifBlank { "Unnamed" },
+                subtitle = listOfNotNull(
+                    user.role.label,
+                    user.classId.ifBlank { null },
+                    user.email.ifBlank { null },
+                ).joinToString(" · "),
+                leading = { Avatar(user.initials) },
+            )
         }
 
-        // Students show the code a parent needs in order to link to them.
+        // Students carry the code a parent needs, so it gets top-tier treatment.
         if (user.role == Role.STUDENT && user.shortCode.isNotBlank()) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(Layout.card))
-                    .background(SurfaceTint)
-                    .padding(Space.m),
-                horizontalArrangement = Arrangement.spacedBy(Space.m),
-                verticalAlignment = Alignment.CenterVertically,
+            Surface(
+                shape = RoundedCornerShape(Layout.cardLarge),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                Icon(Icons.Filled.Key, null, tint = SirenBlue, modifier = Modifier.size(22.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Your linking code", style = MaterialTheme.typography.labelMedium, color = InkSubtle)
-                    Text(
-                        user.shortCode,
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = SirenBlue,
-                        fontWeight = FontWeight.ExtraBold,
+                Row(
+                    Modifier.padding(Space.l),
+                    horizontalArrangement = Arrangement.spacedBy(Space.m),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Filled.Key,
+                        contentDescription = null,
+                        Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space.xxs)) {
+                        Text(
+                            "Your linking code",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        Text(
+                            user.shortCode,
+                            style = MaterialTheme.typography.headlineSmall.tabular(),
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 4.sp,
+                        )
+                        Text(
+                            "Give this to your parent or guardian so they can follow your safety status.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
                 }
-                Text(
-                    "Give this to your\nparent or guardian",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = InkSubtle,
-                )
             }
         }
 
         SectionLabel("Alerts")
-
-        ToggleRow(
-            icon = Icons.Filled.NotificationsActive,
-            title = "Critical alerts",
-            subtitle = "Bypass silent mode for Level 3 events",
-            checked = settings.criticalAlerts,
-            onCheckedChange = { v -> onUpdateSettings { it.copy(criticalAlerts = v) } },
-        )
-        ToggleRow(
-            icon = Icons.Filled.Vibration,
-            title = "Vibration & sound",
-            subtitle = "Escalates with intensity",
-            checked = settings.vibration,
-            onCheckedChange = { v -> onUpdateSettings { it.copy(vibration = v) } },
-        )
-        ToggleRow(
-            icon = Icons.Filled.DarkMode,
-            title = "Dark mode",
-            subtitle = "Use the dark palette",
-            checked = settings.darkMode,
-            onCheckedChange = { v -> onUpdateSettings { it.copy(darkMode = v) } },
-        )
-
-        SectionLabel("Account")
-
-        NavRow(Icons.Filled.ContactEmergency, "Emergency contacts", "${settings.contacts.size} saved", onOpenContacts)
-        NavRow(Icons.Filled.SwapHoriz, "Switch role", user.role.label) { roleDialog = true }
-        NavRow(Icons.Filled.PrivacyTip, "Privacy & data", "How your responses are stored") {}
-        NavRow(Icons.Filled.Info, "About S.I.R.E.N.", "v$versionName") {}
-
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(Layout.card))
-                .background(Surface)
-                .clickable { signOutDialog = true }
-                .padding(Space.m),
-            horizontalArrangement = Arrangement.spacedBy(Space.m),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Filled.Logout, null, tint = Danger, modifier = Modifier.size(22.dp))
-            Text("Sign out", style = MaterialTheme.typography.titleMedium, color = Danger)
+        ListGroup {
+            ToggleRow(
+                icon = Icons.Filled.NotificationsActive,
+                title = "Critical alerts",
+                subtitle = "Sound even when the phone is silenced",
+                checked = settings.criticalAlerts,
+            ) { v -> onUpdateSettings { it.copy(criticalAlerts = v) } }
+            RowDivider()
+            ToggleRow(
+                icon = Icons.Filled.Vibration,
+                title = "Vibration",
+                subtitle = "Escalates with intensity",
+                checked = settings.vibration,
+            ) { v -> onUpdateSettings { it.copy(vibration = v) } }
+            RowDivider()
+            ToggleRow(
+                icon = Icons.Filled.DarkMode,
+                title = "Dark mode",
+                subtitle = "Easier to read at night",
+                checked = settings.darkMode,
+            ) { v -> onUpdateSettings { it.copy(darkMode = v) } }
         }
 
-        InfoBanner(
-            "Seismic Integrated Response and Emergency Notification · City of Bogo Senior High School, Practical Research 2.",
-            Icons.Filled.Info,
+        SectionLabel("Account")
+        ListGroup {
+            NavRow(
+                Icons.Filled.ContactEmergency,
+                "Emergency contacts",
+                "${settings.contacts.size} saved",
+                onOpenContacts,
+            )
+            RowDivider()
+            NavRow(Icons.Filled.SwapHoriz, "Switch role", user.role.label) { roleDialog = true }
+            RowDivider()
+            NavRow(Icons.Filled.PrivacyTip, "Privacy & data", "How your responses are stored") {}
+            RowDivider()
+            NavRow(Icons.Filled.Info, "About S.I.R.E.N.", "Version $versionName") {}
+        }
+
+        ListGroup {
+            ListRow(
+                title = "Sign out",
+                onClick = { signOutDialog = true },
+                leading = {
+                    Icon(
+                        Icons.Filled.Logout,
+                        contentDescription = null,
+                        Modifier.size(24.dp),
+                        tint = SirenTheme.status.danger,
+                    )
+                },
+            )
+        }
+
+        Text(
+            "Seismic Integrated Response and Emergency Notification\nCity of Bogo Senior High School · Practical Research 2",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
         )
 
         Box(Modifier.padding(bottom = Space.xxl))
@@ -197,19 +208,18 @@ fun SettingsScreen(
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .clickable {
+                                .padding(vertical = Space.s),
+                            horizontalArrangement = Arrangement.spacedBy(Space.s),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = role == user.role,
+                                onClick = {
                                     onChangeRole(role)
                                     roleDialog = false
-                                }
-                                .padding(vertical = Space.m),
-                            horizontalArrangement = Arrangement.spacedBy(Space.s),
-                        ) {
-                            Text(
-                                role.label,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = if (role == user.role) SirenBlue else Ink,
-                                fontWeight = if (role == user.role) FontWeight.Bold else FontWeight.Normal,
+                                },
                             )
+                            Text(role.label, style = MaterialTheme.typography.bodyLarge)
                         }
                     }
                 }
@@ -234,6 +244,10 @@ fun SettingsScreen(
     }
 }
 
+/**
+ * The whole row is the target — the Switch only reflects state. Tapping a 56dp-tall
+ * row is far easier under stress than hitting the switch itself.
+ */
 @Composable
 private fun ToggleRow(
     icon: ImageVector,
@@ -242,22 +256,20 @@ private fun ToggleRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Layout.card))
-            .background(Surface)
-            .padding(Space.m),
-        horizontalArrangement = Arrangement.spacedBy(Space.m),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, null, tint = SirenBlue, modifier = Modifier.size(22.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = Ink)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = InkSubtle)
-        }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
+    ListRow(
+        title = title,
+        subtitle = subtitle,
+        onClick = { onCheckedChange(!checked) },
+        leading = {
+            Icon(
+                icon,
+                contentDescription = null,
+                Modifier.size(24.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        trailing = { Switch(checked = checked, onCheckedChange = null) },
+    )
 }
 
 @Composable
@@ -267,21 +279,24 @@ private fun NavRow(
     subtitle: String,
     onClick: () -> Unit,
 ) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Layout.card))
-            .background(Surface)
-            .clickable { onClick() }
-            .padding(Space.m),
-        horizontalArrangement = Arrangement.spacedBy(Space.m),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, null, tint = SirenBlue, modifier = Modifier.size(22.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = Ink)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = InkSubtle)
-        }
-        Icon(Icons.Filled.ChevronRight, null, tint = InkSubtle)
-    }
+    ListRow(
+        title = title,
+        subtitle = subtitle,
+        onClick = onClick,
+        leading = {
+            Icon(
+                icon,
+                contentDescription = null,
+                Modifier.size(24.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        trailing = {
+            Icon(
+                Icons.Filled.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+    )
 }

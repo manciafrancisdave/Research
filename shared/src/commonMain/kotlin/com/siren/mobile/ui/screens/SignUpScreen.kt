@@ -1,6 +1,7 @@
 package com.siren.mobile.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -21,18 +22,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
 import com.siren.mobile.model.Role
 import com.siren.mobile.ui.components.BannerTone
 import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.PrimaryButton
 import com.siren.mobile.ui.components.SirenField
-import com.siren.mobile.ui.theme.Danger
-import com.siren.mobile.ui.theme.DangerTint
-import com.siren.mobile.ui.theme.Ink
-import com.siren.mobile.ui.theme.InkSubtle
 import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.Space
+
+private const val MIN_PASSWORD = 6
 
 /**
  * Account creation. The role picked on the previous screen is carried in and written
@@ -51,22 +49,24 @@ fun SignUpScreen(
     var password by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
 
+    val tooShort = password.isNotEmpty() && password.length < MIN_PASSWORD
     val mismatch = confirm.isNotEmpty() && confirm != password
-    val valid = name.isNotBlank() && email.isNotBlank() && password.length >= 6 && !mismatch
+    val valid = name.isNotBlank() && email.isNotBlank() &&
+        password.length >= MIN_PASSWORD && confirm == password
 
     Column(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = Layout.screenPadding),
-        verticalArrangement = Arrangement.spacedBy(Space.l),
+        verticalArrangement = Arrangement.spacedBy(Space.m),
     ) {
         ScreenHeader(title = "Create your account", onBack = onBack)
 
         Text(
             "Signing up as ${role.label}.",
             style = MaterialTheme.typography.bodyMedium,
-            color = InkSubtle,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         if (error != null) {
@@ -92,7 +92,12 @@ fun SignUpScreen(
             label = "Password",
             leadingIcon = Icons.Filled.Lock,
             isPassword = true,
-            supportingText = "At least 6 characters",
+            isError = tooShort,
+            supportingText = if (tooShort) {
+                "Use at least $MIN_PASSWORD characters"
+            } else {
+                "At least $MIN_PASSWORD characters"
+            },
         )
         SirenField(
             value = confirm,
@@ -106,7 +111,7 @@ fun SignUpScreen(
 
         if (role == Role.STUDENT) {
             InfoBanner(
-                "You'll get a 6-character linking code after sign-up. Give it to your parent or guardian so they can follow your safety status.",
+                "You'll get a 6-character linking code after signing up. Give it to your parent or guardian so they can follow your safety status.",
                 Icons.Filled.Badge,
             )
         }
@@ -119,10 +124,11 @@ fun SignUpScreen(
         )
 
         Text(
-            "Your role is set now and can be changed later in Settings.",
+            "Your role is saved now and can be changed later in Settings.",
             style = MaterialTheme.typography.labelSmall,
-            color = InkSubtle,
-            modifier = Modifier.padding(bottom = Space.xxl),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+
+        Box(Modifier.padding(bottom = Space.xxl))
     }
 }

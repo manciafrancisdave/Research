@@ -1,29 +1,25 @@
 package com.siren.mobile.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.BackHand
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mail
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.TableRestaurant
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,26 +27,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.siren.mobile.resources.Res
+import com.siren.mobile.resources.ic_splash_shield
 import com.siren.mobile.ui.components.BannerTone
 import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.PrimaryButton
 import com.siren.mobile.ui.components.SirenField
-import com.siren.mobile.ui.theme.Border
-import com.siren.mobile.ui.theme.Danger
-import com.siren.mobile.ui.theme.DangerTint
-import com.siren.mobile.ui.theme.Ink
-import com.siren.mobile.ui.theme.InkSubtle
 import com.siren.mobile.ui.theme.Layout
-import com.siren.mobile.ui.theme.SirenBlue
-import com.siren.mobile.ui.theme.SirenBlueDark
 import com.siren.mobile.ui.theme.Space
-import com.siren.mobile.ui.theme.SurfaceTint
-import com.siren.mobile.ui.theme.SurfaceTintAlt
+import org.jetbrains.compose.resources.painterResource
 
 /** Prototype screen 02. */
 @Composable
@@ -63,50 +53,62 @@ fun LoginScreen(
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    val canSubmit = email.isNotBlank() && password.isNotBlank()
 
     Column(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = Space.l),
-        verticalArrangement = Arrangement.spacedBy(Space.xl),
+            .padding(horizontal = Layout.screenPadding),
+        verticalArrangement = Arrangement.spacedBy(Space.l),
     ) {
-        // Drop / Cover / Hold illustration band
+        Box(Modifier.padding(top = Space.xxl))
+
+        // Brand lockup — establishes what the app is before asking for credentials.
         Row(
-            Modifier
-                .fillMaxWidth()
-                .height(150.dp)
-                .clip(RoundedCornerShape(Layout.cardLarge))
-                .background(Brush.linearGradient(listOf(SurfaceTintAlt, SurfaceTint))),
-            horizontalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterHorizontally),
+            horizontalArrangement = Arrangement.spacedBy(Space.m),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            listOf(
-                Icons.Filled.TableRestaurant to "Drop",
-                Icons.Filled.Shield to "Cover",
-                Icons.Filled.BackHand to "Hold",
-            ).forEach { (icon, label) ->
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(Space.s),
-                ) {
-                    Icon(icon, null, tint = SirenBlue, modifier = Modifier.size(40.dp))
-                    Text(
-                        label,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = SirenBlueDark,
-                        fontWeight = FontWeight.SemiBold,
+            Surface(
+                shape = RoundedCornerShape(Layout.card),
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(52.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        painter = painterResource(Res.drawable.ic_splash_shield),
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = MaterialTheme.colorScheme.onPrimary,
                     )
                 }
+            }
+            Column {
+                Text(
+                    "S.I.R.E.N.",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.5.sp,
+                )
+                Text(
+                    "Seismic Integrated Response & Emergency Notification",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
-            Text("Welcome back", style = MaterialTheme.typography.headlineSmall, color = Ink)
             Text(
-                "Sign in to stay protected and connected.",
+                "Welcome back",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Text(
+                "Sign in to keep receiving campus earthquake alerts.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = InkSubtle,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
@@ -130,22 +132,18 @@ fun LoginScreen(
                 isPassword = true,
             )
 
-            Text(
-                "Forgot password?",
-                style = MaterialTheme.typography.bodySmall,
-                color = SirenBlue,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
-                    .align(Alignment.End)
-                    .clickable { onForgotPassword(email) },
-            )
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                TextButton(onClick = { onForgotPassword(email) }) {
+                    Text("Forgot password?")
+                }
+            }
 
             PrimaryButton(
-                text = "Sign In",
+                text = "Sign in",
                 onClick = { onSignIn(email, password) },
-                enabled = email.isNotBlank() && password.isNotBlank(),
+                enabled = canSubmit,
                 loading = loading,
-                icon = Icons.Filled.ArrowForward,
+                icon = Icons.AutoMirrored.Filled.ArrowForward,
             )
         }
 
@@ -154,21 +152,22 @@ fun LoginScreen(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("New here? ", style = MaterialTheme.typography.bodySmall, color = InkSubtle)
             Text(
-                "Create an account",
-                style = MaterialTheme.typography.bodySmall,
-                color = SirenBlue,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.clickable { onCreateAccount() },
+                "New here?",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            TextButton(onClick = onCreateAccount) { Text("Create an account") }
         }
 
-        Box(
-            Modifier
+        Text(
+            "During shaking: drop, cover, hold on.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
                 .fillMaxWidth()
-                .height(1.dp)
-                .background(Border)
+                .padding(bottom = Space.xxl),
         )
     }
 }

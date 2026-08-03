@@ -26,7 +26,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -37,6 +36,8 @@ import com.siren.mobile.ui.components.Haptics
 import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.Pill
 import com.siren.mobile.ui.components.PrimaryButton
+import com.siren.mobile.util.DateFmt
+import com.siren.mobile.util.asG
 import com.siren.mobile.ui.theme.Danger
 import com.siren.mobile.ui.theme.DangerTint
 import com.siren.mobile.ui.theme.Ink
@@ -46,9 +47,6 @@ import com.siren.mobile.ui.theme.Safe
 import com.siren.mobile.ui.theme.SafeTint
 import com.siren.mobile.ui.theme.SirenGradients
 import com.siren.mobile.ui.theme.Space
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
  * Prototype screen 09. Once submitted the answer is locked so the record stays accurate;
@@ -62,11 +60,8 @@ fun SafetyConfirmationScreen(
     onDone: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val context = LocalContext.current
     val stamp = remember(myResponse?.respondedAt) {
-        myResponse?.let {
-            SimpleDateFormat("MMM d, yyyy · h:mm:ss a", Locale.getDefault()).format(Date(it.respondedAt))
-        }
+        myResponse?.let { "${DateFmt.date(it.respondedAt)} · ${DateFmt.clockSeconds(it.respondedAt)}" }
     }
 
     Column(
@@ -78,7 +73,7 @@ fun SafetyConfirmationScreen(
         ScreenHeader(title = "Safety check", onBack = onBack)
 
         Pill(
-            text = String.format(Locale.US, "ACTIVE EVENT · %.2fg", alert.magnitudeG),
+            text = "ACTIVE EVENT · ${alert.magnitudeG.asG()}",
             fg = Danger,
             bg = DangerTint,
         )
@@ -113,7 +108,7 @@ fun SafetyConfirmationScreen(
             PrimaryButton(
                 text = "I'm Safe",
                 onClick = {
-                    Haptics.confirm(context)
+                    Haptics.confirm()
                     onRespond(ResponseStatus.SAFE)
                 },
                 icon = Icons.Filled.CheckCircle,
@@ -122,7 +117,7 @@ fun SafetyConfirmationScreen(
             PrimaryButton(
                 text = "I Need Help",
                 onClick = {
-                    Haptics.confirm(context)
+                    Haptics.confirm()
                     onRespond(ResponseStatus.NEEDS_HELP)
                 },
                 icon = Icons.Filled.Sos,
@@ -186,7 +181,7 @@ fun SafetyConfirmationScreen(
                     PrimaryButton(
                         text = "Escalate — I Need Help",
                         onClick = {
-                            Haptics.confirm(context)
+                            Haptics.confirm()
                             onRespond(ResponseStatus.NEEDS_HELP)
                         },
                         icon = Icons.Filled.Sos,

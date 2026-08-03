@@ -39,6 +39,8 @@ import com.siren.mobile.ui.components.EmptyState
 import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.Pill
 import com.siren.mobile.ui.components.intensityColor
+import com.siren.mobile.util.DateFmt
+import com.siren.mobile.util.asG
 import com.siren.mobile.ui.theme.Border
 import com.siren.mobile.ui.theme.Danger
 import com.siren.mobile.ui.theme.Ink
@@ -47,9 +49,6 @@ import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.Safe
 import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.ui.theme.Surface
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 private enum class HistoryFilter { ALL, SENSOR, SIMULATION }
 
@@ -116,9 +115,7 @@ fun HistoryScreen(
 
 @Composable
 private fun HistoryRow(alert: AlertRecord, response: SafetyResponse?) {
-    val stamp = remember(alert.detectedAt) {
-        SimpleDateFormat("MMM d, yyyy · h:mm a", Locale.getDefault()).format(Date(alert.detectedAt))
-    }
+    val stamp = remember(alert.detectedAt) { DateFmt.dateTime(alert.detectedAt) }
     Column(
         Modifier
             .fillMaxWidth()
@@ -155,7 +152,7 @@ private fun HistoryRow(alert: AlertRecord, response: SafetyResponse?) {
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    String.format(Locale.US, "%.2fg", alert.magnitudeG),
+                    alert.magnitudeG.asG(),
                     style = MaterialTheme.typography.titleMedium,
                     color = intensityColor(alert.intensity),
                     fontWeight = FontWeight.Bold,

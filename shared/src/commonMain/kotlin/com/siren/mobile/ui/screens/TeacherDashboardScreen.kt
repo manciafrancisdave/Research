@@ -37,6 +37,8 @@ import com.siren.mobile.ui.components.SectionLabel
 import com.siren.mobile.ui.components.SirenField
 import com.siren.mobile.ui.components.StatTile
 import com.siren.mobile.ui.components.StatusChip
+import com.siren.mobile.util.DateFmt
+import com.siren.mobile.util.asG
 import com.siren.mobile.ui.theme.Border
 import com.siren.mobile.ui.theme.Danger
 import com.siren.mobile.ui.theme.Ink
@@ -48,9 +50,6 @@ import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.ui.theme.Surface
 import com.siren.mobile.ui.theme.SurfaceTint
 import com.siren.mobile.ui.theme.Warn
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /** Prototype screen 06 — the adviser's live class overview. */
 @Composable
@@ -140,7 +139,7 @@ fun TeacherDashboardScreen(
                     Column {
                         Text("Live safety check", style = MaterialTheme.typography.titleMedium, color = Ink)
                         Text(
-                            String.format(Locale.US, "Event %.2fg in progress", activeAlert.magnitudeG),
+                            "Event ${activeAlert.magnitudeG.asG()} in progress",
                             style = MaterialTheme.typography.bodySmall,
                             color = InkSubtle,
                         )
@@ -221,7 +220,7 @@ fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
 @Composable
 fun RosterRow(person: LinkedPerson) {
     val time = person.respondedAt?.let {
-        remember(it) { SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(it)) }
+        remember(it) { DateFmt.clock(it) }
     }
     Row(
         Modifier

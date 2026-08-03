@@ -32,10 +32,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.siren.mobile.R
+import com.siren.mobile.resources.*
 import com.siren.mobile.ui.theme.SirenGradients
 import com.siren.mobile.ui.theme.Space
-import androidx.compose.ui.res.painterResource
+import org.jetbrains.compose.resources.painterResource
 
 /**
  * Prototype screen 01. Shown while Firebase resolves the session; the pulsing rings and
@@ -84,7 +84,7 @@ fun SplashScreen(versionName: String = "2.4.0") {
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_splash_shield),
+                        painter = painterResource(Res.drawable.ic_splash_shield),
                         contentDescription = null,
                         tint = Color.White,
                         modifier = Modifier.size(56.dp),

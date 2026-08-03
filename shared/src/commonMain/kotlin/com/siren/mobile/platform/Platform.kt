@@ -33,6 +33,9 @@ interface PlatformServices {
 
     /** Subscribes the device to the "alerts" FCM topic. */
     fun subscribeToAlertsTopic()
+
+    /** Wall-clock milliseconds; `System.currentTimeMillis` has no common equivalent. */
+    fun nowMillis(): Long
 }
 
 /**
@@ -52,6 +55,7 @@ private object NoOpPlatformServices : PlatformServices {
     override fun readSettingsJson(): String? = null
     override fun writeSettingsJson(json: String) = Unit
     override fun subscribeToAlertsTopic() = Unit
+    override fun nowMillis(): Long = 0L
 }
 
 object Platform {

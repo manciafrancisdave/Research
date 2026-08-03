@@ -37,6 +37,7 @@ import com.siren.mobile.model.UserProfile
 import com.siren.mobile.ui.components.Avatar
 import com.siren.mobile.ui.components.SectionLabel
 import com.siren.mobile.ui.components.StatusChip
+import com.siren.mobile.util.DateFmt
 import com.siren.mobile.ui.theme.Danger
 import com.siren.mobile.ui.theme.Ink
 import com.siren.mobile.ui.theme.InkSubtle
@@ -47,9 +48,6 @@ import com.siren.mobile.ui.theme.SirenGradients
 import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.ui.theme.Surface
 import com.siren.mobile.ui.theme.SurfaceTint
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /** Prototype screen 07. */
 @Composable
@@ -196,7 +194,7 @@ fun ParentDashboardScreen(
 @Composable
 private fun ChildRow(child: LinkedPerson) {
     val time = child.respondedAt?.let {
-        remember(it) { SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(it)) }
+        remember(it) { DateFmt.clock(it) }
     }
     Row(
         Modifier

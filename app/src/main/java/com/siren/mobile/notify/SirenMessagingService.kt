@@ -5,6 +5,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.siren.mobile.data.SirenRepository
 import com.siren.mobile.model.Intensity
+import com.siren.mobile.platform.Platform
 
 /**
  * Receives the push the hardware bridge triggers. The payload carries the alert id so
@@ -13,7 +14,7 @@ import com.siren.mobile.model.Intensity
  */
 class SirenMessagingService : FirebaseMessagingService() {
 
-    // Topic subscription is re-issued on every app start from SirenRepository's init,
+    // Topic subscription is re-issued on every app start from SirenRepository.start(),
     // so overriding the (now deprecated) onNewToken is unnecessary here.
 
     override fun onMessageReceived(message: RemoteMessage) {
@@ -28,9 +29,9 @@ class SirenMessagingService : FirebaseMessagingService() {
 
         Log.i("SirenMessaging", "alert $alertId $intensity ${magnitude}g")
 
-        Notifier.showAlert(applicationContext, alertId, intensity, magnitude)
+        Platform.services.showAlertNotification(alertId, intensity, magnitude)
 
         // Surfaces the full-screen alert if the app is already in the foreground.
-        SirenRepository.get(applicationContext).showAlertById(alertId)
+        SirenRepository.showAlertById(alertId)
     }
 }

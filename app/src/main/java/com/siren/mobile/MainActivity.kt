@@ -7,20 +7,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.siren.mobile.data.SirenRepository
-import com.siren.mobile.ui.AppRoot
-import com.siren.mobile.ui.theme.SirenTheme
+import com.siren.mobile.platform.AndroidPlatformServices
+import com.siren.mobile.ui.App
 
 class MainActivity : ComponentActivity() {
 
     companion object {
-        const val EXTRA_ALERT_ID = "extra_alert_id"
+        const val EXTRA_ALERT_ID = AndroidPlatformServices.EXTRA_ALERT_ID
     }
-
-    private val repo by lazy { SirenRepository.get(applicationContext) }
 
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -31,7 +27,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         // Hold the system splash until Firebase has told us whether we're signed in.
-        splash.setKeepOnScreenCondition { !repo.authResolved.value }
+        splash.setKeepOnScreenCondition { !SirenRepository.authResolved.value }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
@@ -39,12 +35,8 @@ class MainActivity : ComponentActivity() {
 
         handleIntent(intent)
 
-        setContent {
-            val settings by repo.settings.collectAsStateWithLifecycle()
-            SirenTheme(darkTheme = settings.darkMode) {
-                AppRoot()
-            }
-        }
+        // Theme is applied inside App(), which reads the user's dark-mode setting.
+        setContent { App() }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -54,6 +46,6 @@ class MainActivity : ComponentActivity() {
 
     /** Tapping the notification deep-links straight to that alert. */
     private fun handleIntent(intent: Intent?) {
-        intent?.getStringExtra(EXTRA_ALERT_ID)?.let { repo.showAlertById(it) }
+        intent?.getStringExtra(EXTRA_ALERT_ID)?.let { SirenRepository.showAlertById(it) }
     }
 }

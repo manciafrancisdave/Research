@@ -33,7 +33,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -43,11 +42,10 @@ import com.siren.mobile.ui.components.Haptics
 import com.siren.mobile.ui.components.PrimaryButton
 import com.siren.mobile.ui.components.intensityBrush
 import com.siren.mobile.ui.components.intensityColor
+import com.siren.mobile.util.DateFmt
+import com.siren.mobile.util.asGSpaced
 import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.Space
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
  * Prototype screen 08 — the full-screen alert. Background, badge and haptic pattern all
@@ -60,7 +58,6 @@ fun AlertScreen(
     onConfirmStatus: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val context = LocalContext.current
     val transition = rememberInfiniteTransition(label = "alert")
     val pulse by transition.animateFloat(
         initialValue = 1f,
@@ -70,15 +67,11 @@ fun AlertScreen(
     )
 
     LaunchedEffect(alert.id, vibrationEnabled) {
-        if (vibrationEnabled) Haptics.forIntensity(context, alert.intensity)
+        if (vibrationEnabled) Haptics.forIntensity(alert.intensity)
     }
 
-    val time = remember(alert.detectedAt) {
-        SimpleDateFormat("h:mm:ss a", Locale.getDefault()).format(Date(alert.detectedAt))
-    }
-    val date = remember(alert.detectedAt) {
-        SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(alert.detectedAt))
-    }
+    val time = remember(alert.detectedAt) { DateFmt.clockSeconds(alert.detectedAt) }
+    val date = remember(alert.detectedAt) { DateFmt.date(alert.detectedAt) }
 
     Column(
         Modifier
@@ -149,7 +142,7 @@ fun AlertScreen(
                         style = MaterialTheme.typography.labelMedium,
                     )
                     Text(
-                        String.format(Locale.US, "%.2f g", alert.magnitudeG),
+                        alert.magnitudeG.asGSpaced(),
                         color = Color.White,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 46.sp,
@@ -187,7 +180,7 @@ fun AlertScreen(
         PrimaryButton(
             text = "Confirm Your Status",
             onClick = {
-                Haptics.cancel(context)
+                Haptics.cancel()
                 onConfirmStatus()
             },
             icon = Icons.Filled.HowToReg,
@@ -212,7 +205,7 @@ fun AlertScreen(
             modifier = Modifier
                 .padding(top = Space.xs)
                 .clickable {
-                    Haptics.cancel(context)
+                    Haptics.cancel()
                     onDismiss()
                 },
         )

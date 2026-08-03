@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.siren.mobile.model.EmergencyContact
+import com.siren.mobile.platform.Platform
 import com.siren.mobile.ui.components.Avatar
 import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.Pill
@@ -208,7 +209,7 @@ private fun AddContactDialog(
                 onClick = {
                     onSave(
                         EmergencyContact(
-                            id = "c${System.currentTimeMillis()}",
+                            id = "c${Platform.services.nowMillis()}",
                             name = name.trim(),
                             relation = relation.trim().ifBlank { "Contact" },
                             phone = phone.trim(),

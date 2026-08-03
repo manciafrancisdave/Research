@@ -26,6 +26,8 @@ import com.siren.mobile.ui.components.Pill
 import com.siren.mobile.ui.components.PrimaryButton
 import com.siren.mobile.ui.components.SectionLabel
 import com.siren.mobile.ui.components.StatTile
+import com.siren.mobile.util.DateFmt
+import com.siren.mobile.util.asG
 import com.siren.mobile.ui.theme.Danger
 import com.siren.mobile.ui.theme.DangerTint
 import com.siren.mobile.ui.theme.Ink
@@ -37,9 +39,6 @@ import com.siren.mobile.ui.theme.SirenGradients
 import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.ui.theme.Surface
 import com.siren.mobile.ui.theme.Warn
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /** Prototype screen 10 — the live roll-call for an open event. */
 @Composable
@@ -55,7 +54,7 @@ fun LiveSafetyDashboardScreen(
     val noReply = roster.count { it.status == ResponseStatus.NO_RESPONSE }
     val pct = if (roster.isEmpty()) 0 else (responded * 100) / roster.size
 
-    val started = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(alert.detectedAt))
+    val started = DateFmt.clock(alert.detectedAt)
 
     LazyColumn(
         Modifier.fillMaxWidth(),
@@ -90,7 +89,7 @@ fun LiveSafetyDashboardScreen(
                 verticalArrangement = Arrangement.spacedBy(Space.s),
             ) {
                 Text(
-                    String.format(Locale.US, "Event %.2fg · started %s", alert.magnitudeG, started),
+                    "Event ${alert.magnitudeG.asG()} · started $started",
                     style = MaterialTheme.typography.labelMedium,
                     color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.75f),
                 )

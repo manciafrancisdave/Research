@@ -1,8 +1,5 @@
 package com.siren.mobile.ui
 
-import android.content.Intent
-import android.net.Uri
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -23,20 +20,20 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.siren.mobile.BuildConfig
 import com.siren.mobile.data.LinkResult
 import com.siren.mobile.data.SirenRepository
 import com.siren.mobile.model.Role
+import com.siren.mobile.platform.Platform
 import com.siren.mobile.ui.screens.AlertScreen
 import com.siren.mobile.ui.screens.DemoScreen
 import com.siren.mobile.ui.screens.EmergencyContactsScreen
@@ -53,6 +50,7 @@ import com.siren.mobile.ui.screens.SignUpScreen
 import com.siren.mobile.ui.screens.SplashScreen
 import com.siren.mobile.ui.screens.StudentDashboardScreen
 import com.siren.mobile.ui.screens.TeacherDashboardScreen
+import com.siren.mobile.ui.theme.SirenTheme
 import kotlinx.coroutines.launch
 
 private sealed interface Dest {
@@ -69,23 +67,31 @@ private sealed interface Dest {
 
 private data class NavItem(val dest: Dest, val label: String, val icon: ImageVector)
 
+/** Shared entry point — hosted by MainActivity on Android and MainViewController on iOS. */
 @Composable
-fun AppRoot() {
-    val context = LocalContext.current
-    val repo = remember { SirenRepository.get(context) }
-    val scope = rememberCoroutineScopeCompat()
+fun App() {
+    val settings by SirenRepository.settings.collectAsState()
+    SirenTheme(darkTheme = settings.darkMode) {
+        AppContent()
+    }
+}
 
-    val authResolved by repo.authResolved.collectAsStateWithLifecycle()
-    val signedIn by repo.signedIn.collectAsStateWithLifecycle()
-    val user by repo.user.collectAsStateWithLifecycle()
-    val alerts by repo.alerts.collectAsStateWithLifecycle()
-    val myResponses by repo.myResponses.collectAsStateWithLifecycle()
-    val roster by repo.roster.collectAsStateWithLifecycle()
-    val settings by repo.settings.collectAsStateWithLifecycle()
-    val online by repo.online.collectAsStateWithLifecycle()
-    val incomingAlert by repo.incomingAlert.collectAsStateWithLifecycle()
-    val authLoading by repo.authLoading.collectAsStateWithLifecycle()
-    val authError by repo.authError.collectAsStateWithLifecycle()
+@Composable
+private fun AppContent() {
+    val repo = SirenRepository
+    val scope = rememberCoroutineScope()
+
+    val authResolved by repo.authResolved.collectAsState()
+    val signedIn by repo.signedIn.collectAsState()
+    val user by repo.user.collectAsState()
+    val alerts by repo.alerts.collectAsState()
+    val myResponses by repo.myResponses.collectAsState()
+    val roster by repo.roster.collectAsState()
+    val settings by repo.settings.collectAsState()
+    val online by repo.online.collectAsState()
+    val incomingAlert by repo.incomingAlert.collectAsState()
+    val authLoading by repo.authLoading.collectAsState()
+    val authError by repo.authError.collectAsState()
 
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) {
@@ -95,7 +101,7 @@ fun AppRoot() {
     // ------------------------------------------------------------ auth gate
 
     if (!authResolved) {
-        SplashScreen(BuildConfig.VERSION_NAME)
+        SplashScreen(Platform.services.versionName)
         return
     }
 
@@ -130,7 +136,7 @@ fun AppRoot() {
         backStack.add(d)
     }
 
-    BackHandler(enabled = backStack.size > 1) { pop() }
+    PlatformBackHandler(enabled = backStack.size > 1) { pop() }
 
     val tabs = when (profile.role) {
         Role.STUDENT -> listOf(
@@ -202,7 +208,7 @@ fun AppRoot() {
                         children = roster,
                         online = online,
                         onLinkStudent = { push(Dest.Link) },
-                        onCall = { dial(context, it) },
+                        onCall = { Platform.services.dial(it) },
                     )
                 }
 
@@ -220,7 +226,7 @@ fun AppRoot() {
                         children = roster,
                         online = online,
                         onLinkStudent = { push(Dest.Link) },
-                        onCall = { dial(context, it) },
+                        onCall = { Platform.services.dial(it) },
                     )
                 }
 
@@ -229,7 +235,7 @@ fun AppRoot() {
                 Dest.Settings -> SettingsScreen(
                     user = profile,
                     settings = settings,
-                    versionName = BuildConfig.VERSION_NAME,
+                    versionName = Platform.services.versionName,
                     onUpdateSettings = { repo.updateSettings(it) },
                     onChangeRole = { repo.updateRole(it) },
                     onOpenContacts = { push(Dest.Contacts) },
@@ -241,8 +247,7 @@ fun AppRoot() {
                     working = false,
                     onLink = { code ->
                         scope.launch {
-                            val result = repo.linkStudent(code)
-                            val msg = when (result) {
+                            val msg = when (val result = repo.linkStudent(code)) {
                                 is LinkResult.Success -> "Linked ${result.studentName}"
                                 LinkResult.NotFound -> "No student found for that code."
                                 LinkResult.AlreadyLinked -> "That student is already linked."
@@ -264,8 +269,8 @@ fun AppRoot() {
                     contacts = settings.contacts,
                     onAdd = { repo.addEmergencyContact(it) },
                     onRemove = { repo.removeEmergencyContact(it) },
-                    onCall = { dial(context, it) },
-                    onText = { sms(context, it) },
+                    onCall = { Platform.services.dial(it) },
+                    onText = { Platform.services.sendSms(it) },
                     onBack = { pop() },
                 )
 
@@ -357,25 +362,6 @@ private fun AuthFlow(
                 onClearError()
                 step = 1
             },
-        )
-    }
-}
-
-@Composable
-private fun rememberCoroutineScopeCompat() = androidx.compose.runtime.rememberCoroutineScope()
-
-private fun dial(context: android.content.Context, phone: String) {
-    runCatching {
-        context.startActivity(
-            Intent(Intent.ACTION_DIAL, Uri.parse("tel:${phone.filter { it.isDigit() || it == '+' }}"))
-        )
-    }
-}
-
-private fun sms(context: android.content.Context, phone: String) {
-    runCatching {
-        context.startActivity(
-            Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${phone.filter { it.isDigit() || it == '+' }}"))
         )
     }
 }

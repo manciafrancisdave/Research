@@ -39,9 +39,14 @@
  [x] Gradle 9.6.1 wrapper       in the project folder (gradlew.bat)
  [x] google-services.json       app\google-services.json
  [x] Release keystore           siren-release.jks + keystore.properties
- [x] App source code            app\src\main\java\com\siren\mobile\
- [x] 28 safety-guide icons      app\src\main\res\drawable-xxhdpi\ic_sg_*.png
- [x] Inter font family          app\src\main\res\font\inter_*.ttf
+ [x] App source code            shared\src\commonMain\kotlin\com\siren\mobile\
+ [x] Android host (3 files)     app\src\main\java\com\siren\mobile\
+ [x] 28 safety-guide icons      shared\src\commonMain\composeResources\drawable\
+ [x] Inter font family          shared\src\commonMain\composeResources\font\
+
+ NOTE: the app is now Compose Multiplatform. Almost all code lives in :shared and is
+ compiled for both Android and iOS. The :app module is only the Android host.
+ iOS cannot be built on this Windows PC - see iosApp\README.md.
 
  NOTE: Android Studio ships its own Java (JBR 25). Always build with the JDK 17
  above - see section 3.1.

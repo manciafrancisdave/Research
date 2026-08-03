@@ -1,4 +1,6 @@
+import org.gradle.api.file.FileSystemOperations
 import java.util.Properties
+import javax.inject.Inject
 
 // AGP 9 ships built-in Kotlin support, so org.jetbrains.kotlin.android must NOT be
 // applied. The Compose compiler plugin is still required separately on Kotlin 2.x.
@@ -72,30 +74,70 @@ android {
     }
 }
 
+/*
+ * AGP 9's com.android.kotlin.multiplatform.library plugin does NOT package Compose
+ * Multiplatform resources into the AAR — `shared.aar` ships with zero asset entries,
+ * and only the iOS targets get assembled resources. Without this copy the shared
+ * screens compile fine but Res.drawable.ic_sg_* / Res.font.inter_* fail at runtime.
+ *
+ * The Android resource reader looks for assets/composeResources/<id>/..., where <id>
+ * is derived from the root project + module name.
+ */
+abstract class CopyComposeResourcesTask : DefaultTask() {
+    @get:InputDirectory
+    abstract val sourceDir: DirectoryProperty
+
+    @get:Input
+    abstract val resourceId: Property<String>
+
+    /** Wired as an assets source directory by the Variant API below. */
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @get:Inject
+    abstract val fs: FileSystemOperations
+
+    @TaskAction
+    fun copyFiles() {
+        fs.copy {
+            from(sourceDir)
+            into(outputDir.get().dir("composeResources/${resourceId.get()}"))
+        }
+    }
+}
+
+val copySharedComposeResources =
+    tasks.register<CopyComposeResourcesTask>("copySharedComposeResources") {
+        sourceDir.set(rootProject.file("shared/src/commonMain/composeResources"))
+        resourceId.set("siren.shared.generated.resources")
+    }
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(
+            copySharedComposeResources,
+            CopyComposeResourcesTask::outputDir,
+        )
+    }
+}
+
 dependencies {
+    // All UI, models and the data layer now live in the shared Multiplatform module.
+    implementation(project(":shared"))
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.splashscreen)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.navigation.compose)
-    implementation(libs.androidx.datastore.preferences)
     // Firebase drags in fragment 1.1.0 transitively; registerForActivityResult needs
     // >= 1.3.0 or lintVitalRelease fails (InvalidFragmentVersionForActivityResult).
     implementation(libs.androidx.fragment)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
-    implementation(libs.androidx.ui.graphics)
-    implementation(libs.androidx.ui.tooling.preview)
-    implementation(libs.androidx.material3)
-    implementation(libs.androidx.material.icons.extended)
     debugImplementation(libs.androidx.ui.tooling)
 
+    // Cloud Messaging is not wrapped by GitLive, so the FCM service stays here.
     implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.auth)
-    implementation(libs.firebase.firestore)
     implementation(libs.firebase.messaging)
-
-    implementation(libs.kotlinx.coroutines.play.services)
 }

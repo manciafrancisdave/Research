@@ -48,5 +48,15 @@ kotlin {
             implementation(libs.gitlive.firebase.auth)
             implementation(libs.gitlive.firebase.firestore)
         }
+
+        androidMain.dependencies {
+            // Only for the system back button; the rest of the UI is common.
+            implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.core.ktx)
+            // GitLive does not wrap Cloud Messaging, so the topic subscription and
+            // notification building stay platform-specific.
+            implementation(project.dependencies.platform(libs.firebase.bom))
+            implementation(libs.firebase.messaging)
+        }
     }
 }

@@ -32,6 +32,8 @@ import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.Pill
 import com.siren.mobile.ui.components.SectionLabel
 import com.siren.mobile.ui.components.intensityColor
+import com.siren.mobile.util.DateFmt
+import com.siren.mobile.util.asG
 import com.siren.mobile.ui.theme.Border
 import com.siren.mobile.ui.theme.Ink
 import com.siren.mobile.ui.theme.InkSubtle
@@ -40,9 +42,6 @@ import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.ui.theme.Surface
 import com.siren.mobile.ui.theme.Warn
 import com.siren.mobile.ui.theme.WarnTint
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
  * Prototype screen 12. Exists so the app can be demonstrated and evaluated without the
@@ -92,8 +91,7 @@ fun DemoScreen(
             )
         } else {
             log.forEach { entry ->
-                val stamp = SimpleDateFormat("MMM d · h:mm:ss a", Locale.getDefault())
-                    .format(Date(entry.detectedAt))
+                val stamp = "${DateFmt.date(entry.detectedAt)} · ${DateFmt.clockSeconds(entry.detectedAt)}"
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -111,7 +109,7 @@ fun DemoScreen(
                     )
                     Text(stamp, style = MaterialTheme.typography.bodySmall, color = InkSubtle)
                     Text(
-                        String.format(Locale.US, "%s %.2fg", entry.intensity.severity, entry.magnitudeG),
+                        "${entry.intensity.severity} ${entry.magnitudeG.asG()}",
                         style = MaterialTheme.typography.bodySmall,
                         color = Ink,
                         modifier = Modifier.weight(1f),

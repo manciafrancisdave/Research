@@ -41,6 +41,8 @@ import com.siren.mobile.ui.components.Avatar
 import com.siren.mobile.ui.components.Pill
 import com.siren.mobile.ui.components.SectionLabel
 import com.siren.mobile.ui.components.intensityColor
+import com.siren.mobile.util.DateFmt
+import com.siren.mobile.util.asG
 import com.siren.mobile.ui.theme.Border
 import com.siren.mobile.ui.theme.Ink
 import com.siren.mobile.ui.theme.InkSubtle
@@ -52,9 +54,6 @@ import com.siren.mobile.ui.theme.SirenGradients
 import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.ui.theme.Surface
 import com.siren.mobile.ui.theme.SurfaceTint
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /** Prototype screen 05. */
 @Composable
@@ -207,7 +206,7 @@ private fun SystemStatusCard(latest: AlertRecord?, online: Boolean) {
 
         Text(
             latest?.let {
-                String.format(Locale.US, "Peak %.2fg · %s", it.magnitudeG, it.nodeId ?: it.source.label)
+                "Peak ${it.magnitudeG.asG()} · ${it.nodeId ?: it.source.label}"
             } ?: "No readings yet · awaiting first sensor report",
             style = MaterialTheme.typography.labelSmall,
             color = Color.White.copy(alpha = 0.55f),
@@ -258,9 +257,7 @@ fun RecentAlertRow(
     response: SafetyResponse?,
     onClick: () -> Unit,
 ) {
-    val when_ = remember(alert.detectedAt) {
-        SimpleDateFormat("MMM d · h:mm a", Locale.getDefault()).format(Date(alert.detectedAt))
-    }
+    val when_ = remember(alert.detectedAt) { DateFmt.shortDateTime(alert.detectedAt) }
     Row(
         Modifier
             .fillMaxWidth()
@@ -287,7 +284,7 @@ fun RecentAlertRow(
         }
         Column(Modifier.weight(1f)) {
             Text(
-                String.format(Locale.US, "%s shaking · %.2fg", alert.intensity.severity, alert.magnitudeG),
+                "${alert.intensity.severity} shaking · ${alert.magnitudeG.asG()}",
                 style = MaterialTheme.typography.titleMedium,
                 color = Ink,
             )

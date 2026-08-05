@@ -225,6 +225,27 @@ it lost accounts on reinstall, breaking parent links and history.
   asking. (Note this reverses the prototype, which offered role switching.)
 - The **ESP32 has its own account** and writes alert documents directly; the app only listens
 
+### Phone sign-in — deferred, not abandoned
+
+Sign-in by phone number was specced and deliberately **postponed**. Email/Password is
+the only provider. Nothing in the codebase references phone auth, so there is nothing
+to switch off — this note exists so the decision is not mistaken for an oversight.
+
+It is blocked on three things outside the code, all of which have to happen in the
+Firebase console before a line is worth writing:
+
+1. **Blaze plan.** Phone auth is unavailable on Spark, and every verification SMS is
+   billed per message.
+2. **SHA-256 fingerprint** registered against the Android app, or device verification
+   fails and falls back to reCAPTCHA.
+3. **Phone enabled** under Authentication → Sign-in method (plus an APNs key before
+   iOS could ever use it).
+
+One open technical question when it is picked up: GitLive KMP 2.5.0 may not wrap
+`PhoneAuthProvider`. If it does not, phone auth needs platform-specific code behind a
+`PlatformServices` method on both Android and iOS — the same pattern already used for
+Cloud Messaging, which GitLive also does not wrap.
+
 ## Emergency contacts
 
 Three official City of Bogo responders are seeded for every user on first run

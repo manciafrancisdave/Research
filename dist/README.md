@@ -1,46 +1,60 @@
 # Built APKs
 
-| File | Version | Signing | Built |
-|---|---|---|---|
-| `SIREN-v2.6.0-debug.apk` | 2.6.0 (versionCode 4) | **debug key** | 5 Aug 2026 |
+| File | Version | Signing | Size | Built |
+|---|---|---|---|---|
+| `SIREN-v2.6.0-release.apk` | 2.6.0 (versionCode 4) | `siren-release.jks`, alias `siren` | 4.53 MB | 5 Aug 2026 |
 
 `package com.research.siren` · `compileSdk 37` · `targetSdk 35` · `minSdk 24`
+
+Signing certificate SHA-256:
+
+```
+16:EC:CC:66:64:B8:E7:4A:38:B8:75:37:5F:B1:C6:AE:00:D7:73:F4:85:AF:2E:03:32:43:64:C9:10:02:BC:3E
+```
+
+A debug APK was published here briefly and has been removed — the release build
+supersedes it. Rebuild one with `:app:assembleDebug` if you need a debuggable
+copy.
 
 ## Installing
 
 Copy it to the phone and open it. Android will ask you to allow installs from
-this source — that is expected for an APK that did not come from Play.
+this source; that is expected for an APK that did not come from Play.
 
-**Uninstall any older S.I.R.E.N. build first.** This is signed with the debug
-key, and Android refuses to install over an app whose signing key differs. The
-error it gives — "App not installed" — does not explain why.
+**Uninstall any older S.I.R.E.N. build first.** This is signed with a key
+generated on 5 Aug 2026, and Android refuses to install over an app whose
+signing key differs. The error it gives — "App not installed" — does not
+explain why.
 
-## This is a debug build
+## Verified before publishing
 
-It is fine for testing and for the defence demonstration, but it is not a
-release artifact:
+Checked against the built artifact, not assumed:
 
-- signed with the auto-generated debug key, not `siren-release.jks`
-- debuggable, and not run through R8 shrinking or obfuscation
-- larger than a release build would be
+- **Signature** — `apksigner verify` passes, APK Signature Scheme v2, and the
+  certificate digest matches the keystore fingerprint above
+- **Alarm audio** — present at **139,695 bytes**. Release builds shorten
+  resource paths, so `res/raw/siren_alarm.mp3` ships as `res/dQ.mp3`; a
+  filename check answers the wrong question here. `isShrinkResources` is
+  deliberately `false` for exactly this reason — see `app/build.gradle.kts`.
+- **Compose resources** — 28 `ic_sg_*` pictograms and 5 Inter weights, which
+  AGP 9's KMP-library plugin does not package on its own
+- **Strings, post-R8** — the intensity-level readouts are present; the removed
+  dark-mode toggle, the old peak-acceleration readout, and the four false
+  "SMS fallback" claims are all absent
+- **`lintVitalRelease`** — passes. This is release-only and had failed
+  historically on the `androidx.fragment` transitive pull from Firebase; the
+  pin to 1.8.9 holds.
 
-A signed release APK needs `keystore.properties` and `siren-release.jks` in the
-repository root. Neither is committed — see `.gitignore` — so `assembleRelease`
-cannot be reproduced from a fresh clone without restoring them.
+R8 minification is on: 15 dex files collapse to 1, and the APK drops from
+25.77 MB (debug) to 4.53 MB.
 
-## Verified contents
+## Not verified
 
-`CLAUDE.md` warns that a successful build proves nothing about whether the
-Compose resources were packaged, because AGP 9's KMP-library plugin does not
-ship them and `:app` works around it with a copy task. This APK was opened and
-checked:
-
-- 28 `ic_sg_*` safety-guide pictograms — present
-- 5 `inter_*` font weights — present
-- `res/raw/siren_alarm.mp3` (139,695 bytes) — present
-
-The on-device canary is still the Safety Guide screen. If those pictograms
-render on a real phone, the packaging workaround is genuinely working.
+**Nothing here has been run.** No device or emulator was available. These are
+static checks — they prove the code compiled, the resources packaged and the
+signature is valid. They do not prove the app launches, renders correctly, or
+survives a real alert. Install it on a phone and walk Demo Mode through all
+three tiers; the Safety Guide screen is the canary for resource packaging.
 
 ## Rebuilding
 
@@ -49,8 +63,9 @@ $env:JAVA_HOME="C:\Program Files\Eclipse Adoptium\jdk-17.0.20.8-hotspot"
 $env:ANDROID_HOME="C:\Android\Sdk"
 $env:Path="$env:JAVA_HOME\bin;$env:Path"
 
-.\gradlew.bat :app:assembleDebug
+.\gradlew.bat :app:assembleRelease
 ```
 
-A fresh clone also needs `app/google-services.json` restored from the Firebase
-console before it will build at all.
+A fresh clone needs three files restored first, all gitignored on purpose:
+`app/google-services.json`, `keystore.properties` and `siren-release.jks`.
+Without the latter two the release build still succeeds but comes out unsigned.

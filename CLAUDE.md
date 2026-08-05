@@ -185,9 +185,9 @@ safety confirmation outstanding.
 
 | Level | Sound | Vibration | Service |
 |---|---|---|---|
-| Green ≤ 0.30 g | single chime, respects ringer | one pulse | none |
-| Yellow 0.31–0.60 g | repeats, stops after 30 s | repeating | foreground |
-| **Red ≥ 0.61 g** | **loops until dismissed, bypasses silent** | **continuous** | foreground |
+| Green — Intensity I–IV | single chime, respects ringer | one pulse | none |
+| Yellow — Intensity V–VI | repeats, stops after 30 s | repeating | foreground |
+| **Red — Intensity VII+** | **loops until dismissed, bypasses silent** | **continuous** | foreground |
 
 Android runs it from `SirenAlarmService` (a foreground service) — audio driven from a
 composable dies the moment the app is backgrounded, which is exactly when the alarm
@@ -255,13 +255,33 @@ uses the 28 recovered `ic_sg_*` pictograms.
 
 ## Intensity thresholds
 
-Must stay in lockstep with the firmware (`Intensity.fromMagnitude`):
+Must stay in lockstep with the firmware — `Intensity.fromMagnitude` here,
+`BAND_YELLOW_G` / `BAND_RED_G` in `siren_esp32.ino`. Change one and the hardware and
+the phone disagree about what colour an earthquake is.
 
-| Band | Range | Level | Behaviour |
-|---|---|---|---|
-| Green | ≤ 0.30 g | 1 | Notification only, single vibration |
-| Yellow | 0.31 – 0.60 g | 2 | Full-screen alert, repeating vibration |
-| Red | ≥ 0.61 g | 3 | Alarm sound, continuous vibration, full-screen intent |
+| Band | Shown to users | g range | Level | Behaviour |
+|---|---|---|---|---|
+| Green | Intensity I–IV · Light shaking | 0.000 – 0.010 g | 1 | Notification only, single vibration |
+| Yellow | Intensity V–VI · Moderate shaking | 0.010 – 0.120 g | 2 | Full-screen alert, repeating vibration |
+| Red | Intensity VII+ · Destructive shaking | ≥ 0.120 g | 3 | Alarm sound, continuous vibration, full-screen intent |
+
+**Users never see the g figure.** Every readout, notification and list row shows
+`Intensity.levelText` ("Intensity V–VI") instead — a student reading "0.12 g" mid-
+earthquake learns nothing, and intensity levels are the language drills already use.
+`magnitudeG` is still stored on every alert for the study's results, and is still shown
+on the Demo screen, which is a developer surface.
+
+## Theme
+
+**Light-only, deliberately.** `SirenTheme` ignores the system dark setting; there is no
+dark scheme and no toggle in Settings. A dark scheme used to ship, and several screens
+— the login screen worst of all — dropped to unreadable contrast under it. Do not
+reintroduce one without contrast-checking every screen against WCAG AA.
+
+`SettingsDoc` no longer has a `darkMode` field, but installs that predate this still
+have the key in their stored JSON. `ignoreUnknownKeys = true` on the repository's `Json`
+is what stops those settings failing to parse and wiping the user's saved emergency
+contacts. Do not tighten it.
 
 ## Data model (Firestore)
 

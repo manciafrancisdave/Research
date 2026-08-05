@@ -1,6 +1,5 @@
 package com.siren.mobile.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -9,7 +8,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -17,7 +15,13 @@ import androidx.compose.ui.unit.dp
 /**
  * Status colours are not part of Material's scheme, so they ride along in their own
  * CompositionLocal. Screens read `SirenTheme.status.danger` instead of importing raw
- * palette values — that is what makes dark mode actually work.
+ * palette values, which keeps every status colour in one place.
+ *
+ * The app is deliberately **light-only**. A dark scheme used to ship alongside this
+ * one, but several screens — the login screen worst of all — dropped to unreadable
+ * contrast under it, and an emergency app that cannot be read is worse than one that
+ * ignores the system theme. Do not reintroduce a dark scheme without contrast-checking
+ * every screen against WCAG AA (4.5:1 for body text, 3:1 for large text and icons).
  */
 @Immutable
 data class StatusColors(
@@ -49,14 +53,6 @@ private val LightStatus = StatusColors(
     danger = DangerText, dangerContainer = DangerTint, onDangerContainer = Color(0xFF4C0F0F),
     safeFill = SafeFill, warnFill = WarnFill, dangerFill = DangerFill,
     hero = Navy, onHero = Color.White, onHeroMuted = Color(0xFFA8B4C8),
-)
-
-private val DarkStatus = StatusColors(
-    safe = SafeOnDark, safeContainer = Color(0xFF10331F), onSafeContainer = Color(0xFFB7F7CE),
-    warn = WarnOnDark, warnContainer = Color(0xFF3A2B0A), onWarnContainer = Color(0xFFFCE7B0),
-    danger = DangerOnDark, dangerContainer = Color(0xFF3B1618), onDangerContainer = Color(0xFFFFD2D2),
-    safeFill = SafeOnDark, warnFill = WarnOnDark, dangerFill = DangerOnDark,
-    hero = DarkSurfaceContainerHigh, onHero = DarkInk, onHeroMuted = DarkInkSubtle,
 )
 
 private val LocalStatusColors = staticCompositionLocalOf { LightStatus }
@@ -93,35 +89,6 @@ private val LightColors = lightColorScheme(
     outline = BorderStrong,
     outlineVariant = Border,
     scrim = Color(0x99000000),
-)
-
-private val DarkColors = darkColorScheme(
-    primary = SirenBlueOnDark,
-    onPrimary = Color(0xFF06152F),
-    primaryContainer = Color(0xFF1B3468),
-    onPrimaryContainer = Color(0xFFD6E4FF),
-    secondary = SirenBlueLight,
-    onSecondary = Color(0xFF06152F),
-    secondaryContainer = Color(0xFF1B3468),
-    onSecondaryContainer = Color(0xFFD6E4FF),
-    background = DarkBg,
-    onBackground = DarkInk,
-    surface = DarkSurface,
-    onSurface = DarkInk,
-    surfaceVariant = DarkSurfaceContainer,
-    onSurfaceVariant = DarkInkSubtle,
-    surfaceContainerLowest = DarkSurfaceLow,
-    surfaceContainerLow = Color(0xFF121A29),
-    surfaceContainer = DarkSurfaceContainer,
-    surfaceContainerHigh = DarkSurfaceContainerHigh,
-    surfaceContainerHighest = Color(0xFF2A3750),
-    error = DangerOnDark,
-    onError = Color(0xFF2B0708),
-    errorContainer = Color(0xFF3B1618),
-    onErrorContainer = Color(0xFFFFD2D2),
-    outline = Color(0xFF3B4864),
-    outlineVariant = DarkBorder,
-    scrim = Color(0xCC000000),
 )
 
 /** One radius scale. Screens must not invent their own corner values. */
@@ -161,14 +128,15 @@ object Space {
     val xxxl = 40.dp
 }
 
+/**
+ * Light-only by design — the system's dark setting is deliberately ignored, so the
+ * app looks and reads identically on every phone regardless of how it is configured.
+ */
 @Composable
-fun SirenTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    content: @Composable () -> Unit,
-) {
-    CompositionLocalProvider(LocalStatusColors provides if (darkTheme) DarkStatus else LightStatus) {
+fun SirenTheme(content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalStatusColors provides LightStatus) {
         MaterialTheme(
-            colorScheme = if (darkTheme) DarkColors else LightColors,
+            colorScheme = LightColors,
             typography = sirenTypography(),
             shapes = SirenShapes,
             content = content,

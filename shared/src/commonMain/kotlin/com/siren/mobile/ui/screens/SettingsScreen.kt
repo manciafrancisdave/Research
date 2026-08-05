@@ -14,7 +14,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ContactEmergency
-import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Logout
@@ -143,13 +142,6 @@ fun SettingsScreen(
                 subtitle = "Escalates with intensity",
                 checked = settings.vibration,
             ) { v -> onUpdateSettings { it.copy(vibration = v) } }
-            RowDivider()
-            ToggleRow(
-                icon = Icons.Filled.DarkMode,
-                title = "Dark mode",
-                subtitle = "Easier to read at night",
-                checked = settings.darkMode,
-            ) { v -> onUpdateSettings { it.copy(darkMode = v) } }
         }
 
         SectionLabel("Account")

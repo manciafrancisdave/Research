@@ -104,8 +104,11 @@ stress ("Confirm you're safe", not "Please confirm your safety status now").
 ### A10. Density and layout
 
 Test at 360dp width **and** on a tablet. Nothing should stretch full-bleed on a large
-screen — constrain content width. Verify the app in dark theme; `DarkColors` is
-defined in `Theme.kt` but has never been visually checked.
+screen — constrain content width.
+
+The dark theme this section used to ask you to verify has since been **removed**. It
+was never visually checked, and when it finally was, the login screen turned out to be
+unreadable under it. The app is light-only now — see the Theme section in `CLAUDE.md`.
 
 ---
 

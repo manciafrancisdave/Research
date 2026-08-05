@@ -273,10 +273,9 @@ class SirenAlarmService : Service() {
             )
         }
 
-        val magnitudeText = String.format(java.util.Locale.US, "%.2fg", magnitude)
         val builder = NotificationCompat.Builder(this, CHANNEL_ALARM)
             .setSmallIcon(if (smallIconResId != 0) smallIconResId else android.R.drawable.stat_sys_warning)
-            .setContentTitle("Earthquake detected — $magnitudeText")
+            .setContentTitle("Earthquake detected — ${intensity.levelText}")
             .setContentText("Confirm your status to silence the alarm.")
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)

@@ -38,7 +38,6 @@ import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.Pill
 import com.siren.mobile.ui.components.PrimaryButton
 import com.siren.mobile.util.DateFmt
-import com.siren.mobile.util.asG
 import com.siren.mobile.ui.theme.Danger
 import com.siren.mobile.ui.theme.DangerTint
 import com.siren.mobile.ui.theme.Ink
@@ -74,7 +73,7 @@ fun SafetyConfirmationScreen(
         ScreenHeader(title = "Safety check", onBack = onBack)
 
         Pill(
-            text = "ACTIVE EVENT · ${alert.magnitudeG.asG()}",
+            text = "ACTIVE EVENT · ${alert.intensity.levelText.uppercase()}",
             fg = Danger,
             bg = DangerTint,
         )

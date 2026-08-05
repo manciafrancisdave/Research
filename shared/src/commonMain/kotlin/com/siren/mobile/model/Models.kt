@@ -21,26 +21,58 @@ enum class Role(val label: String, val blurb: String) {
 }
 
 /**
- * Intensity bands follow the campus ESP32 accelerometer calibration used in the study:
- * Green <= 0.30 g, Yellow 0.31 - 0.60 g, Red >= 0.61 g.
+ * Intensity bands follow the campus ESP32 accelerometer calibration used in the study.
+ *
+ * Users are shown [scale] and [shaking] — "Intensity V–VI · Moderate shaking" — never
+ * the raw g figure. A student reading "0.12 g" on a phone during an earthquake learns
+ * nothing; an intensity level is the language drills and PHIVOLCS advisories already
+ * use. The g value is still stored on every alert for the study's results, and still
+ * shown on the Demo screen, which is a developer surface.
+ *
+ * These thresholds MUST stay in lockstep with BAND_YELLOW_G / BAND_RED_G in the ESP32
+ * firmware. If one side changes and the other does not, the hardware and the phone
+ * disagree about what colour an earthquake is.
  */
 enum class Intensity(
     val label: String,
     val severity: String,
     val level: Int,
+    /** Roman-numeral band shown to users, e.g. "V–VI". */
+    val scale: String,
+    /** Plain-language descriptor paired with [scale]. */
+    val shaking: String,
+    /** The g range behind this band. Documentation and the Demo screen only. */
     val range: String,
     val behaviour: String,
 ) {
-    GREEN("Green", "Minor", 1, "≤ 0.30 g", "Notification only, single vibration"),
-    YELLOW("Yellow", "Moderate", 2, "0.31 – 0.60 g", "Full-screen alert, repeating vibration"),
-    RED("Red", "Severe", 3, "≥ 0.61 g", "Alarm sound, continuous vibration, status required");
+    GREEN(
+        "Green", "Minor", 1,
+        "I–IV", "Light shaking",
+        "0.000 – 0.010 g", "Notification only, single vibration",
+    ),
+    YELLOW(
+        "Yellow", "Moderate", 2,
+        "V–VI", "Moderate shaking",
+        "0.010 – 0.120 g", "Full-screen alert, repeating vibration",
+    ),
+    RED(
+        "Red", "Severe", 3,
+        "VII+", "Destructive shaking",
+        "0.120 g and above", "Alarm sound, continuous vibration, status required",
+    );
 
     val wire: String get() = name.lowercase()
 
+    /** "Intensity V–VI" — the headline readout. */
+    val levelText: String get() = "Intensity $scale"
+
+    /** "Intensity V–VI · Moderate shaking" — where there is room for both. */
+    val levelWithShaking: String get() = "$levelText · $shaking"
+
     companion object {
         fun fromMagnitude(g: Double): Intensity = when {
-            g >= 0.61 -> RED
-            g >= 0.31 -> YELLOW
+            g >= 0.120 -> RED
+            g >= 0.010 -> YELLOW
             else -> GREEN
         }
 
@@ -168,6 +200,5 @@ val DefaultEmergencyContacts: List<EmergencyContact> = listOf(
 data class SirenSettings(
     val criticalAlerts: Boolean = true,
     val vibration: Boolean = true,
-    val darkMode: Boolean = false,
     val contacts: List<EmergencyContact> = DefaultEmergencyContacts,
 )

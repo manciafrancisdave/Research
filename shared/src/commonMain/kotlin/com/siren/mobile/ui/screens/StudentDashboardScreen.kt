@@ -56,9 +56,6 @@ import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.SirenTheme
 import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.util.DateFmt
-import com.siren.mobile.util.asG
-import com.siren.mobile.util.asGSpaced
-import com.siren.mobile.util.tabular
 
 /** Anything older than this stops dominating the home screen. */
 private const val ACTIVE_WINDOW_MS = 60L * 60L * 1000L
@@ -232,8 +229,13 @@ private fun StatusPanel(
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                latest.magnitudeG.asGSpaced(),
-                style = MaterialTheme.typography.displaySmall.tabular(),
+                latest.intensity.levelText,
+                style = MaterialTheme.typography.displaySmall,
+                color = onColor,
+            )
+            Text(
+                latest.intensity.shaking,
+                style = MaterialTheme.typography.titleSmall,
                 color = onColor,
             )
             Text(
@@ -289,9 +291,9 @@ private fun StatusPanel(
                 }
             }
             Text(
-                latest?.let { "Last reading ${it.magnitudeG.asG()} · ${DateFmt.shortDateTime(it.detectedAt)}" }
+                latest?.let { "Last reading ${it.intensity.levelText} · ${DateFmt.shortDateTime(it.detectedAt)}" }
                     ?: "Awaiting the first sensor report",
-                style = MaterialTheme.typography.labelSmall.tabular(),
+                style = MaterialTheme.typography.labelSmall,
                 color = onColorMuted,
             )
         }
@@ -346,7 +348,7 @@ private fun AlertRow(
 ) {
     val tint = intensityColor(alert.intensity)
     ListRow(
-        title = "${alert.intensity.severity} · ${alert.magnitudeG.asG()}",
+        title = "${alert.intensity.severity} · ${alert.intensity.levelText}",
         subtitle = buildString {
             append(DateFmt.shortDateTime(alert.detectedAt))
             response?.let {

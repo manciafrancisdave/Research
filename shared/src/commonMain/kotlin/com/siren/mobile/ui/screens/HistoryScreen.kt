@@ -46,7 +46,6 @@ import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.SirenTheme
 import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.util.DateFmt
-import com.siren.mobile.util.asG
 import com.siren.mobile.util.tabular
 
 private enum class HistoryFilter(val label: String) {
@@ -157,7 +156,7 @@ private fun HistoryRow(alert: AlertRecord, response: SafetyResponse?) {
         trailing = {
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                 Text(
-                    alert.magnitudeG.asG(),
+                    alert.intensity.levelText,
                     style = MaterialTheme.typography.titleMedium.tabular(),
                     color = tint,
                     fontWeight = FontWeight.Bold,

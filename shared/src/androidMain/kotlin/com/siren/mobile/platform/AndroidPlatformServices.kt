@@ -171,11 +171,13 @@ class AndroidPlatformServices(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        val magnitude = String.format(java.util.Locale.US, "%.2fg", magnitudeG)
+        // Users see the intensity level, never the raw g figure — the notification
+        // shade is the least useful place to make somebody interpret acceleration.
+        val level = intensity.levelText
         val title = if (intensity == Intensity.GREEN) {
-            "Minor tremor detected — $magnitude"
+            "Minor tremor detected — $level"
         } else {
-            "Earthquake detected — $magnitude"
+            "Earthquake detected — $level"
         }
         val body = if (intensity == Intensity.GREEN) {
             "No action needed. Logged for the record."

@@ -82,11 +82,11 @@ fun DemoScreen(
 
         item {
             ListGroup {
-                TriggerRow(Intensity.GREEN, "0.22 g · notification only") { onTrigger(Intensity.GREEN) }
+                TriggerRow(Intensity.GREEN, "${Intensity.GREEN.levelText} · notification only") { onTrigger(Intensity.GREEN) }
                 RowDivider()
-                TriggerRow(Intensity.YELLOW, "0.48 g · full-screen alert") { onTrigger(Intensity.YELLOW) }
+                TriggerRow(Intensity.YELLOW, "${Intensity.YELLOW.levelText} · full-screen alert") { onTrigger(Intensity.YELLOW) }
                 RowDivider()
-                TriggerRow(Intensity.RED, "0.74 g · alarm until dismissed") { onTrigger(Intensity.RED) }
+                TriggerRow(Intensity.RED, "${Intensity.RED.levelText} · alarm until dismissed") { onTrigger(Intensity.RED) }
             }
         }
 

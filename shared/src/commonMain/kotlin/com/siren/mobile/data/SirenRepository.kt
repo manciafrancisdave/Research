@@ -519,10 +519,14 @@ object SirenRepository {
      * sensor readings in the history and in the paper's evaluation data.
      */
     fun simulateAlert(intensity: Intensity) {
+        // Each value must sit inside its own band in Intensity.fromMagnitude. These
+        // moved when the bands were rebased on intensity levels — the old 0.22 / 0.48
+        // / 0.74 all land in RED under the current thresholds, which would have made
+        // every simulation fire the full alarm.
         val magnitude = when (intensity) {
-            Intensity.GREEN -> 0.22
-            Intensity.YELLOW -> 0.48
-            Intensity.RED -> 0.74
+            Intensity.GREEN -> 0.005
+            Intensity.YELLOW -> 0.050
+            Intensity.RED -> 0.300
         }
         scope.launch {
             runCatching {
@@ -697,11 +701,16 @@ internal data class ResponseDoc(
     val alertId: String = "",
 )
 
+/**
+ * `darkMode` used to live here. It is gone with the dark scheme, and the stored JSON
+ * on existing installs still carries the key — `ignoreUnknownKeys = true` on [json]
+ * is what lets those settings keep loading instead of resetting and wiping the user's
+ * saved emergency contacts. Do not tighten that flag.
+ */
 @Serializable
 internal data class SettingsDoc(
     val criticalAlerts: Boolean = true,
     val vibration: Boolean = true,
-    val darkMode: Boolean = false,
     val contacts: List<ContactDoc> = emptyList(),
     /**
      * Records that the official responder numbers have been added once. Without it,
@@ -712,7 +721,6 @@ internal data class SettingsDoc(
     fun toModel() = SirenSettings(
         criticalAlerts = criticalAlerts,
         vibration = vibration,
-        darkMode = darkMode,
         contacts = contacts.map { EmergencyContact(it.id, it.name, it.relation, it.phone, it.primary) },
     )
 
@@ -720,7 +728,6 @@ internal data class SettingsDoc(
         fun from(s: SirenSettings) = SettingsDoc(
             criticalAlerts = s.criticalAlerts,
             vibration = s.vibration,
-            darkMode = s.darkMode,
             contacts = s.contacts.map { ContactDoc(it.id, it.name, it.relation, it.phone, it.primary) },
             seededDefaults = true,
         )

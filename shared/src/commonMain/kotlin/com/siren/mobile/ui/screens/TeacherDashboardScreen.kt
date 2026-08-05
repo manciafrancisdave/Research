@@ -50,7 +50,6 @@ import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.SirenTheme
 import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.util.DateFmt
-import com.siren.mobile.util.asG
 import com.siren.mobile.util.tabular
 
 private enum class RosterFilter(val label: String) {
@@ -141,7 +140,7 @@ fun TeacherDashboardScreen(
                         color = status.onHero,
                     )
                     Text(
-                        "Event ${activeAlert.magnitudeG.asG()} · started ${DateFmt.clock(activeAlert.detectedAt)}",
+                        "${activeAlert.intensity.levelText} · started ${DateFmt.clock(activeAlert.detectedAt)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = status.onHeroMuted,
                     )

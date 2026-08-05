@@ -145,11 +145,12 @@ class IosPlatformServices(
     }
 
     override fun showAlertNotification(alertId: String, intensity: Intensity, magnitudeG: Double) {
-        val magnitude = magnitudeG.formatTwo()
+        // Intensity level, not raw g — matches Android and the in-app readouts.
+        val level = intensity.levelText
         val content = UNMutableNotificationContent().apply {
             setTitle(
-                if (intensity == Intensity.GREEN) "Minor tremor detected — ${magnitude}g"
-                else "Earthquake detected — ${magnitude}g"
+                if (intensity == Intensity.GREEN) "Minor tremor detected — $level"
+                else "Earthquake detected — $level"
             )
             setBody(
                 if (intensity == Intensity.GREEN) "No action needed. Logged for the record."
@@ -205,9 +206,4 @@ class IosPlatformServices(
 
     override fun nowMillis(): Long =
         (NSDate().timeIntervalSince1970 * 1000.0).toLong()
-}
-
-private fun Double.formatTwo(): String {
-    val scaled = kotlin.math.round(this * 100).toLong()
-    return "${scaled / 100}.${(scaled % 100).toString().padStart(2, '0')}"
 }

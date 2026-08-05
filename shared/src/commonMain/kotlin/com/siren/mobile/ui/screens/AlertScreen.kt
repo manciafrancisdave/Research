@@ -48,7 +48,6 @@ import com.siren.mobile.ui.components.PrimaryButton
 import com.siren.mobile.ui.components.intensityBrush
 import com.siren.mobile.ui.components.intensityColor
 import com.siren.mobile.util.DateFmt
-import com.siren.mobile.util.asGSpaced
 import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.Space
 
@@ -151,15 +150,20 @@ fun AlertScreen(
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        "Peak ground acceleration",
+                        "Shaking intensity",
                         color = Color.White.copy(alpha = 0.8f),
                         style = MaterialTheme.typography.labelMedium,
                     )
                     Text(
-                        alert.magnitudeG.asGSpaced(),
+                        alert.intensity.scale,
                         color = Color.White,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 46.sp,
+                    )
+                    Text(
+                        alert.intensity.shaking,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleMedium,
                     )
                 }
 

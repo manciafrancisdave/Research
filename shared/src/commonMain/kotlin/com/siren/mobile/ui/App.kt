@@ -82,7 +82,7 @@ private enum class NavDirection { Forward, Back, Tab }
 @Composable
 fun App() {
     val settings by SirenRepository.settings.collectAsState()
-    SirenTheme(darkTheme = settings.darkMode) {
+    SirenTheme {
         AppContent()
     }
 }

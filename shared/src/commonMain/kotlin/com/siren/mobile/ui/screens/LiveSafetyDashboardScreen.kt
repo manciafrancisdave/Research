@@ -39,7 +39,6 @@ import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.SirenTheme
 import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.util.DateFmt
-import com.siren.mobile.util.asG
 import com.siren.mobile.util.tabular
 
 /** Prototype screen 10 — the live roll-call for an open event. */
@@ -98,7 +97,7 @@ fun LiveSafetyDashboardScreen(
                 verticalArrangement = Arrangement.spacedBy(Space.s),
             ) {
                 Text(
-                    "Event ${alert.magnitudeG.asG()} · started ${DateFmt.clock(alert.detectedAt)}",
+                    "${alert.intensity.levelText} · started ${DateFmt.clock(alert.detectedAt)}",
                     style = MaterialTheme.typography.labelMedium,
                     color = status.onHeroMuted,
                 )

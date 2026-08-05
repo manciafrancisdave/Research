@@ -57,7 +57,7 @@ private val guideSections = listOf(
         "Getting help",
         listOf(
             GuideItem(Res.drawable.ic_sg_call_sos, "Send an SOS", "Tap I Need Help in the app — it reaches your adviser and guardians at once."),
-            GuideItem(Res.drawable.ic_sg_call_signal, "If there is no signal", "SMS fallback still delivers to your saved emergency contacts."),
+            GuideItem(Res.drawable.ic_sg_call_signal, "If there is no signal", "Call or text your saved emergency contacts directly — a voice call often gets through when data will not."),
             GuideItem(Res.drawable.ic_sg_megaphone, "Make noise if trapped", "Shout or tap on pipes in bursts of three. Conserve your voice."),
             GuideItem(Res.drawable.ic_sg_lifering, "Help only if it is safe", "Never enter a damaged structure to reach someone."),
         ),

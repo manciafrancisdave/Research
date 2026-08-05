@@ -50,8 +50,11 @@ import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.util.initials
 
 /**
- * Prototype screen 13. Mirrors the hardware's SMS fallback list, so contacts are still
- * reachable when the phone has no data connection.
+ * Prototype screen 13. A quick-call list: one tap hands the number to the phone's own
+ * dialer or SMS composer, so it still works when the app has no data connection.
+ *
+ * It does NOT send anything by itself. There is no automated SMS anywhere in this
+ * system — the node is Wi-Fi only and carries no GSM hardware.
  */
 @Composable
 fun EmergencyContactsScreen(
@@ -91,7 +94,12 @@ fun EmergencyContactsScreen(
 
         item {
             InfoBanner(
-                "SMS fallback is active — these contacts are still reached when there is no internet.",
+                // Was "SMS fallback is active — these contacts are still reached when
+                // there is no internet." That was false: nothing in the app or the
+                // node sends SMS, and no GSM hardware exists to send one. Telling
+                // someone help is already on its way when it is not is the worst
+                // possible failure mode for this screen.
+                "Tap a contact to call or text them yourself. Your phone dials directly, so these numbers work even with no internet.",
                 Icons.Filled.Sms,
             )
         }
@@ -151,7 +159,7 @@ fun EmergencyContactsScreen(
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text("Remove ${contact.name}?") },
-            text = { Text("They will no longer receive SMS fallback alerts from this device.") },
+            text = { Text("They will be removed from your quick-call list. You can add them again at any time.") },
             confirmButton = {
                 TextButton(onClick = {
                     onRemove(contact.id)

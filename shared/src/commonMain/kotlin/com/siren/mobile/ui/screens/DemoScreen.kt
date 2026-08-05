@@ -72,7 +72,7 @@ fun DemoScreen(
 
         item {
             InfoBanner(
-                "Simulated events are tagged DEMO everywhere they appear and never send SMS to guardians. Use this for the defence demonstration, not during a real drill.",
+                "Simulated events are tagged DEMO everywhere they appear. Use this for the defence demonstration, not during a real drill.",
                 Icons.Filled.Warning,
                 tone = BannerTone.Warn,
             )

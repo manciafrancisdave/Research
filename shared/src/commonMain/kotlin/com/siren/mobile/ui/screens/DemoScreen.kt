@@ -41,7 +41,7 @@ import com.siren.mobile.util.tabular
 
 /**
  * Prototype screen 12. Exists so the app can be demonstrated and evaluated without the
- * Arduino/ESP32 rig attached — the hardware and app tracks did not finish together.
+ * ESP32 sensor node attached — the hardware and app tracks did not finish together.
  */
 @Composable
 fun DemoScreen(

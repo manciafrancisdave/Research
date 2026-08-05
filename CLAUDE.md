@@ -1,8 +1,8 @@
 # CLAUDE.md — S.I.R.E.N. Mobile
 
 Mobile companion app for **S.I.R.E.N. (Seismic Integrated Response and Emergency
-Notification)** — an IoT earthquake detection system built around an Arduino R3 +
-ESP32 + ADXL335 accelerometer (Practical Research 2, City of Bogo Senior High School).
+Notification)** — an IoT earthquake detection system built around an ESP32 +
+ADXL335 accelerometer (Practical Research 2, City of Bogo Senior High School).
 
 This repo is the **app**, not the firmware. It receives alerts when the hardware
 detects a seismic event, lets users confirm "I'm Safe" / "I Need Help", shows a live
@@ -306,7 +306,7 @@ uninstall before installing.
 
 ## Out of scope
 
-- Arduino/ESP32 firmware (separate hardware repo)
+- ESP32 firmware (separate hardware repo)
 - QR-code scanning for parent linking (needs a camera dependency; code entry only)
 - Structural damage assessment, evacuation routing, search-and-rescue
 - Replacing official PHIVOLCS warnings — supplementary local tool only

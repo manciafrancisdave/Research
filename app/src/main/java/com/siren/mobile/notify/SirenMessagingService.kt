@@ -39,6 +39,17 @@ class SirenMessagingService : FirebaseMessagingService() {
         )
 
         // Surfaces the full-screen alert if the app is already in the foreground.
-        SirenRepository.showAlertById(alertId)
+        //
+        // Green is excluded on purpose. It is informational — startAlarm treats it as
+        // a single chime with no foreground service, and the Firestore listener no
+        // longer raises it full-screen either. Letting the push path take over the
+        // screen anyway would make the same event behave differently depending on
+        // whether it arrived by push or by snapshot.
+        //
+        // Tapping the notification still opens it: that path runs through
+        // MainActivity, and is a deliberate user action rather than an interruption.
+        if (intensity != Intensity.GREEN) {
+            SirenRepository.showAlertById(alertId)
+        }
     }
 }

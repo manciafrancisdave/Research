@@ -187,13 +187,12 @@ object SirenRepository {
 
     fun signOut() {
         scope.launch {
+            // detachAll now empties the per-user flows as well, so signing out and
+            // switching accounts clear the same way.
             detachAll()
             runCatching { auth.signOut() }
             _signedIn.value = false
             _user.value = null
-            _alerts.value = emptyList()
-            _myResponses.value = emptyMap()
-            _roster.value = emptyList()
         }
     }
 
@@ -292,7 +291,15 @@ object SirenRepository {
                     } else if (newest != null && newest.id != lastIncomingId) {
                         lastIncomingId = newest.id
                         if (!newest.closed) {
-                            _incomingAlert.value = newest
+                            // Green is informational only — a notification and one
+                            // buzz, no full-screen takeover, no safety response owed.
+                            // `startAlarm` already draws that line in the platform
+                            // layer; this gate has to match it, or a Green event
+                            // hijacks the whole screen for something nobody needs to
+                            // act on. Yellow and Red still take over, as intended.
+                            if (newest.intensity != Intensity.GREEN) {
+                                _incomingAlert.value = newest
+                            }
                             // Foreground path. The push path starts the alarm from
                             // SirenMessagingService instead.
                             Platform.services.startAlarm(
@@ -455,6 +462,15 @@ object SirenRepository {
             )
     }
 
+    /**
+     * Cancels every listener **and empties the state they fed**.
+     *
+     * The emptying is not optional. `attachFor` calls this when the signed-in uid
+     * changes, so without it a second account signing in on the same phone sees the
+     * previous user's roster, their safety responses and even their live full-screen
+     * alert, until each listener happens to deliver its first snapshot. On a shared
+     * school handset that is one student's status shown under another's name.
+     */
     private fun detachAll() {
         profileJob?.cancel(); profileJob = null
         alertsJob?.cancel(); alertsJob = null
@@ -467,6 +483,11 @@ object SirenRepository {
         lastIncomingId = null
         rosterMembers = emptyList()
         rosterResponses = emptyList()
+
+        _alerts.value = emptyList()
+        _myResponses.value = emptyMap()
+        _roster.value = emptyList()
+        _incomingAlert.value = null
     }
 
     private fun reportListenerError(what: String, err: Throwable) {

@@ -140,7 +140,9 @@ private fun HistoryRow(alert: AlertRecord, response: SafetyResponse?) {
     val status = SirenTheme.status
 
     ListRow(
-        title = "${alert.intensity.severity} · Level ${alert.intensity.level}",
+        // Was "Minor · Level 1", which sat next to the trailing "Intensity I–IV" and
+        // put two different numbering schemes for the same thing on one row.
+        title = "${alert.intensity.severity} · ${alert.intensity.shaking}",
         subtitle = DateFmt.dateTime(alert.detectedAt),
         leading = {
             Surface(

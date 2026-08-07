@@ -14,7 +14,21 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 The artifact lands in `app/build/outputs/apk/debug/app-debug.apk`. Copy it here
 named `SIREN-v<version>-debug.apk`.
 
-_(No debug build is checked in at the moment.)_
+| File | Version | Size | Built |
+|---|---|---|---|
+| `SIREN-v2.7.0-debug.apk` | 2.7.0 (versionCode 5) | 25.7 MB | 8 Aug 2026 |
+
+Verified against the built artifact, not assumed:
+
+- **Alarm audio** — `res/raw/siren_alarm.mp3` present at **139,695 bytes**
+- **Compose resources** — 28 `ic_sg_*` pictograms and 5 Inter weights under
+  `assets/composeResources/com.siren.mobile.resources/`, which AGP 9's
+  KMP-library plugin does not package on its own
+- 15 `classes*.dex` — R8 is off, as expected for debug
+
+**Not run.** No device or emulator was available. These are static checks: they
+prove it compiled, packaged and carries its resources. They do not prove it
+launches or survives an alert.
 
 ## Why keep them separate from release
 

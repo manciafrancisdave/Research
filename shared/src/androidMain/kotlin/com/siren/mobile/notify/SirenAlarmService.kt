@@ -84,6 +84,16 @@ class SirenAlarmService : Service() {
     private var shouldRun = false
 
     /**
+     * Whether `startForeground` has actually been called on this instance.
+     *
+     * Only meaningful for `stopForeground`, which must not be called on a service that
+     * never went foreground. The five-second `startForegroundService` contract is
+     * avoided at the source instead — `AndroidPlatformServices.stopAlarm` uses
+     * `startService`, so no promise is ever made for a stop.
+     */
+    private var wentForeground = false
+
+    /**
      * The alarm must never fall silent while an event is unanswered. MediaPlayer looping
      * can stall — an MP3's encoder padding leaves a gap at the wrap point, and the OS or
      * another app can interrupt playback outright. This re-starts it if that happens.
@@ -349,6 +359,7 @@ class SirenAlarmService : Service() {
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
+            wentForeground = true
             true
         } catch (e: Exception) {
             Log.e(TAG, "Foreground start refused; falling back to a notification", e)
@@ -396,7 +407,18 @@ class SirenAlarmService : Service() {
         currentAlertId = null
         Platform.setAlarmActive(false)
 
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        // Only tear down the foreground state we actually established. A stop can arrive
+        // at an instance that never played anything — "I'm Safe" on a Green alert, or on
+        // an event reopened from history — and calling stopForeground on a service that
+        // never went foreground is pointless noise.
+        if (wentForeground) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            wentForeground = false
+        } else {
+            // No foreground notification of ours to remove, but the alarm notification
+            // may still be sitting in the shade from a previous instance.
+            runCatching { NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID) }
+        }
         stopSelf()
     }
 

@@ -96,10 +96,30 @@ class AndroidPlatformServices(
         runCatching { ContextCompat.startForegroundService(appContext, intent) }
     }
 
+    /**
+     * Stops the alarm. **Uses `startService`, never `startForegroundService`.**
+     *
+     * `startForegroundService` is a promise that the service will call `startForeground`
+     * within five seconds, and Android kills the process with
+     * `ForegroundServiceDidNotStartInTimeException` if it does not. ACTION_STOP goes
+     * straight to `stopEverything()` → `stopSelf()` and never goes foreground, so that
+     * promise could not be kept.
+     *
+     * It only crashed when the service was not *already* foreground, which is why it
+     * looked intermittent: responding to a Green alert (no service is ever started for
+     * one), to a Yellow after its 30-second timeout, after "Silence alarm", or to any
+     * past event reopened from history. In each case "I'm Safe" started a fresh service
+     * purely to tell it to stop, and the app died five seconds later — including when
+     * the tap came from the alarm notification, because ACTION_SAFE calls through here
+     * too.
+     *
+     * Stopping needs no foreground promise. If the service is not running there is
+     * nothing to stop, and `startService` throwing from the background is caught here.
+     */
     override fun stopAlarm() {
         val intent = Intent(appContext, SirenAlarmService::class.java)
             .setAction(SirenAlarmService.ACTION_STOP)
-        runCatching { ContextCompat.startForegroundService(appContext, intent) }
+        runCatching { appContext.startService(intent) }
         cancelVibration()
     }
 

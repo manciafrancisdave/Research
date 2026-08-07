@@ -3,6 +3,7 @@ package com.siren.mobile.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,15 +14,22 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,10 +45,14 @@ import com.siren.mobile.model.AlertRecord
 import com.siren.mobile.model.LinkedPerson
 import com.siren.mobile.model.ResponseStatus
 import com.siren.mobile.model.UserProfile
+import com.siren.mobile.ui.components.BannerTone
 import com.siren.mobile.ui.components.EmptyState
+import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.ListGroup
+import com.siren.mobile.ui.components.ListRow
 import com.siren.mobile.ui.components.OfflineBanner
 import com.siren.mobile.ui.components.Pill
+import com.siren.mobile.ui.components.PrimaryButton
 import com.siren.mobile.ui.components.RowDivider
 import com.siren.mobile.ui.components.SectionHeader
 import com.siren.mobile.ui.components.SirenField
@@ -66,11 +78,18 @@ fun TeacherDashboardScreen(
     activeAlert: AlertRecord?,
     online: Boolean,
     loading: Boolean,
+    working: Boolean,
     onOpenLive: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenGuide: () -> Unit,
+    onAddStudent: (code: String) -> Unit,
+    onRemoveStudent: (uid: String) -> Unit,
+    onEditProfile: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(RosterFilter.ALL) }
+    var addingCode by remember { mutableStateOf("") }
+    var removing by remember { mutableStateOf<LinkedPerson?>(null) }
 
     val status = SirenTheme.status
     val safe = roster.count { it.status == ResponseStatus.SAFE }
@@ -159,6 +178,50 @@ fun TeacherDashboardScreen(
             item { RosterBreakdown(safe = safe, needsHelp = help, noReply = noReply) }
         }
 
+        // The roster is keyed entirely on classId, so an adviser with no class set can
+        // never have a student. This is the first thing to fix, ahead of the code field.
+        if (user.classId.isBlank()) {
+            item {
+                InfoBanner(
+                    "Set the class you advise before adding students — the roll call is grouped by class.",
+                    Icons.Filled.Warning,
+                    tone = BannerTone.Warn,
+                )
+            }
+            item {
+                PrimaryButton(
+                    text = "Set your class",
+                    onClick = onEditProfile,
+                    icon = Icons.Filled.School,
+                )
+            }
+        } else {
+            item { SectionHeader(title = "Add a student") }
+            item {
+                SirenField(
+                    value = addingCode,
+                    onValueChange = {
+                        addingCode = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(6)
+                    },
+                    label = "Student's linking code",
+                    leadingIcon = Icons.Filled.Key,
+                    supportingText = "6 characters, from the student's Settings. Adds them to ${user.classId}.",
+                )
+            }
+            item {
+                PrimaryButton(
+                    text = "Add to my class",
+                    onClick = {
+                        onAddStudent(addingCode)
+                        addingCode = ""
+                    },
+                    enabled = addingCode.length == 6 && !working,
+                    loading = working,
+                    icon = Icons.Filled.PersonAdd,
+                )
+            }
+        }
+
         item {
             SirenField(
                 value = query,
@@ -196,7 +259,11 @@ fun TeacherDashboardScreen(
             roster.isEmpty() -> item {
                 EmptyState(
                     title = "No students yet",
-                    subtitle = "Students appear here once they are assigned to your class. Ask the school registrar to add them.",
+                    subtitle = if (user.classId.isBlank()) {
+                        "Set the class you advise, then add students with the 6-character code from their Settings."
+                    } else {
+                        "Add students with the 6-character code shown in their Settings."
+                    },
                     icon = Icons.Filled.Groups,
                 )
             }
@@ -213,10 +280,46 @@ fun TeacherDashboardScreen(
                 ListGroup {
                     visible.forEachIndexed { i, person ->
                         RosterRow(person)
+                        Box(Modifier.padding(start = Space.l, bottom = Space.xs)) {
+                            TextButton(onClick = { removing = person }) { Text("Remove from class") }
+                        }
                         if (i < visible.lastIndex) RowDivider()
                     }
                 }
             }
         }
+
+        item {
+            ListGroup {
+                ListRow(
+                    title = "Safety guide",
+                    subtitle = "Drop, cover, hold and 27 more",
+                    onClick = onOpenGuide,
+                    leading = {
+                        Icon(
+                            Icons.Filled.MenuBook,
+                            contentDescription = null,
+                            Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                )
+            }
+        }
+    }
+
+    removing?.let { person ->
+        AlertDialog(
+            onDismissRequest = { removing = null },
+            title = { Text("Remove ${person.name}?") },
+            text = { Text("They stay signed up and keep receiving alerts, but drop off your roll call.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onRemoveStudent(person.uid)
+                    removing = null
+                }) { Text("Remove") }
+            },
+            dismissButton = { TextButton(onClick = { removing = null }) { Text("Cancel") } },
+        )
     }
 }

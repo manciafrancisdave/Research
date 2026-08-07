@@ -15,6 +15,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.FamilyRestroom
+import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Warning
@@ -31,7 +33,9 @@ import androidx.compose.ui.unit.dp
 import com.siren.mobile.model.LinkedPerson
 import com.siren.mobile.model.ResponseStatus
 import com.siren.mobile.model.UserProfile
+import com.siren.mobile.ui.components.BannerTone
 import com.siren.mobile.ui.components.EmptyState
+import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.ListGroup
 import com.siren.mobile.ui.components.ListRow
 import com.siren.mobile.ui.components.OfflineBanner
@@ -47,10 +51,12 @@ import com.siren.mobile.ui.theme.Space
 fun ParentDashboardScreen(
     user: UserProfile,
     children: List<LinkedPerson>,
+    pendingRequests: Int,
     online: Boolean,
     loading: Boolean,
     schoolHotline: String = "(082) 227-4410",
     onLinkStudent: () -> Unit,
+    onOpenGuide: () -> Unit,
     onCall: (String) -> Unit,
 ) {
     val status = SirenTheme.status
@@ -80,6 +86,22 @@ fun ParentDashboardScreen(
         }
 
         if (!online) item { OfflineBanner() }
+
+        // A request the student has not answered yet looks identical to no request at
+        // all from here, which is how a parent ends up typing the same code repeatedly.
+        if (pendingRequests > 0) {
+            item {
+                InfoBanner(
+                    text = if (pendingRequests == 1) {
+                        "Waiting for a student to confirm you are their parent or guardian."
+                    } else {
+                        "$pendingRequests link requests are waiting for the students to confirm."
+                    },
+                    icon = Icons.Filled.HourglassTop,
+                    tone = BannerTone.Warn,
+                )
+            }
+        }
 
         item {
             val headline = when {
@@ -160,35 +182,59 @@ fun ParentDashboardScreen(
 
         item {
             ListGroup {
-                ListRow(
+                TileRow(
+                    icon = Icons.Filled.Call,
                     title = "School emergency line",
                     subtitle = "$schoolHotline · 24/7 hotline",
                     onClick = { onCall(schoolHotline) },
-                    leading = {
-                        Surface(
-                            shape = RoundedCornerShape(Layout.tile),
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.size(40.dp),
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Filled.Call,
-                                    contentDescription = null,
-                                    Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                            }
-                        }
-                    },
-                    trailing = {
-                        Icon(
-                            Icons.Filled.ChevronRight,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
+                )
+                RowDivider()
+                // Guardians get the guide too: a parent reaching a collapsed school
+                // needs the same do-not-enter-a-damaged-building advice a student does.
+                TileRow(
+                    icon = Icons.Filled.MenuBook,
+                    title = "Safety guide",
+                    subtitle = "Drop, cover, hold and 27 more",
+                    onClick = onOpenGuide,
                 )
             }
         }
     }
+}
+
+@Composable
+private fun TileRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    ListRow(
+        title = title,
+        subtitle = subtitle,
+        onClick = onClick,
+        leading = {
+            Surface(
+                shape = RoundedCornerShape(Layout.tile),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(40.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+            }
+        },
+        trailing = {
+            Icon(
+                Icons.Filled.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+    )
 }

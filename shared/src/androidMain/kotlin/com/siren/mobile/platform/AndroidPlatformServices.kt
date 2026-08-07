@@ -1,5 +1,6 @@
 package com.siren.mobile.platform
 
+import android.app.Activity
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -12,12 +13,23 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.google.firebase.FirebaseException
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.PhoneAuthCredential
+import com.google.firebase.auth.PhoneAuthOptions
+import com.google.firebase.auth.PhoneAuthProvider
 import com.google.firebase.messaging.FirebaseMessaging
 import com.siren.mobile.model.Intensity
 import com.siren.mobile.notify.SirenAlarmService
+import com.siren.mobile.util.asGSpaced
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * Android half of [PlatformServices].
@@ -31,6 +43,11 @@ class AndroidPlatformServices(
     private val smallIconRes: Int,
     private val alarmSoundRes: Int,
     override val versionName: String,
+    /**
+     * The activity currently on screen, or null. Phone verification needs a real
+     * Activity for its reCAPTCHA fallback, and this class only holds an app context.
+     */
+    private val currentActivity: () -> Activity? = { null },
 ) : PlatformServices {
 
     companion object {
@@ -171,18 +188,20 @@ class AndroidPlatformServices(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        // Users see the intensity level, never the raw g figure — the notification
-        // shade is the least useful place to make somebody interpret acceleration.
+        // The intensity leads, because that is what somebody acts on. The measured
+        // acceleration follows it as a trailing detail, matching how the in-app readouts
+        // put the g figure underneath the level in smaller type.
         val level = intensity.levelText
         val title = if (intensity == Intensity.GREEN) {
             "Minor tremor detected — $level"
         } else {
             "Earthquake detected — $level"
         }
+        val reading = magnitudeG.asGSpaced(3)
         val body = if (intensity == Intensity.GREEN) {
-            "No action needed. Logged for the record."
+            "No action needed. Logged for the record. Peak ground acceleration $reading."
         } else {
-            "Drop, cover, hold on. Tap to confirm your status."
+            "Drop, cover, hold on. Tap to confirm your status. Peak ground acceleration $reading."
         }
 
         val builder = NotificationCompat.Builder(
@@ -251,4 +270,174 @@ class AndroidPlatformServices(
     }
 
     override fun nowMillis(): Long = System.currentTimeMillis()
+
+    // ------------------------------------------------------------ phone auth
+
+    /**
+     * The Android SDK always has `PhoneAuthProvider`, so the capability is present in
+     * every build. Whether the *Firebase project* will actually send an SMS is a console
+     * setting, and failing that way produces a specific message in [phoneAuthMessage]
+     * rather than a silently missing option.
+     */
+    override val phoneAuthSupported: Boolean = true
+
+    override suspend fun sendPhoneCode(phoneE164: String): PhoneCodeRequest {
+        val activity = currentActivity()
+            ?: return PhoneCodeRequest.Failed("Open the app before requesting a code.")
+        val auth = runCatching { FirebaseAuth.getInstance() }.getOrNull()
+            ?: return PhoneCodeRequest.Failed("Sign-in is not configured on this build.")
+
+        return suspendCancellableCoroutine { cont ->
+            val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+                /**
+                 * Some numbers and some devices never need the user to type anything —
+                 * Google Play can validate the SIM directly, or auto-read the SMS. When
+                 * that happens sign-in is already done and asking for a code would be a
+                 * dead end, so the caller is told to skip that step.
+                 */
+                override fun onVerificationCompleted(credential: PhoneAuthCredential) {
+                    if (!cont.isActive) return
+                    auth.signInWithCredential(credential).addOnCompleteListener { task ->
+                        if (!cont.isActive) return@addOnCompleteListener
+                        val user = task.result?.user
+                        cont.resume(
+                            if (task.isSuccessful && user != null) {
+                                PhoneCodeRequest.AutoVerified(user.uid, user.phoneNumber.orEmpty())
+                            } else {
+                                PhoneCodeRequest.Failed(phoneAuthMessage(task.exception))
+                            }
+                        )
+                    }
+                }
+
+                override fun onVerificationFailed(e: FirebaseException) {
+                    if (cont.isActive) cont.resume(PhoneCodeRequest.Failed(phoneAuthMessage(e)))
+                }
+
+                override fun onCodeSent(id: String, token: PhoneAuthProvider.ForceResendingToken) {
+                    if (cont.isActive) {
+                        cont.resume(PhoneCodeRequest.Sent(PhoneVerification(phoneE164, id)))
+                    }
+                }
+            }
+
+            val options = PhoneAuthOptions.newBuilder(auth)
+                .setPhoneNumber(phoneE164)
+                .setTimeout(60L, TimeUnit.SECONDS)
+                .setActivity(activity)
+                .setCallbacks(callbacks)
+                .build()
+
+            runCatching { PhoneAuthProvider.verifyPhoneNumber(options) }
+                .onFailure { if (cont.isActive) cont.resume(PhoneCodeRequest.Failed(phoneAuthMessage(it))) }
+        }
+    }
+
+    override suspend fun confirmPhoneCode(
+        verification: PhoneVerification,
+        code: String,
+    ): PhoneVerification.Result {
+        val auth = runCatching { FirebaseAuth.getInstance() }.getOrNull()
+            ?: return PhoneVerification.Result.Failed("Sign-in is not configured on this build.")
+        val credential = runCatching {
+            PhoneAuthProvider.getCredential(verification.token, code)
+        }.getOrElse {
+            return PhoneVerification.Result.Failed("That code doesn't look right.")
+        }
+
+        return suspendCancellableCoroutine { cont ->
+            auth.signInWithCredential(credential).addOnCompleteListener { task ->
+                if (!cont.isActive) return@addOnCompleteListener
+                val user = task.result?.user
+                cont.resume(
+                    if (task.isSuccessful && user != null) {
+                        PhoneVerification.Result.SignedIn(user.uid, user.phoneNumber.orEmpty())
+                    } else {
+                        PhoneVerification.Result.Failed(phoneAuthMessage(task.exception))
+                    }
+                )
+            }
+        }
+    }
+
+    /**
+     * Phone auth fails for three reasons that are nothing to do with the user, and the
+     * raw SDK text for all three is unreadable. They are worth naming because every one
+     * of them is fixed in the Firebase console, not in the app:
+     * the project is on Spark rather than Blaze, the signing certificate's SHA-256 is
+     * not registered, or the Phone provider is switched off.
+     */
+    private fun phoneAuthMessage(e: Throwable?): String {
+        val raw = e?.message.orEmpty()
+        return when {
+            e is FirebaseAuthInvalidCredentialsException &&
+                raw.contains("code", true) -> "That code is incorrect or has expired."
+
+            raw.contains("BILLING_NOT_ENABLED", true) ||
+                raw.contains("billing", true) ->
+                "Phone sign-up is not switched on for this project yet. Use email instead."
+
+            raw.contains("OPERATION_NOT_ALLOWED", true) ||
+                raw.contains("not enabled", true) ->
+                "Phone sign-up is not switched on for this project yet. Use email instead."
+
+            raw.contains("INVALID_APP_CREDENTIAL", true) ||
+                raw.contains("app is not authorized", true) ||
+                raw.contains("reCAPTCHA", true) ->
+                "This build isn't registered for phone sign-up yet. Use email instead."
+
+            raw.contains("TOO_MANY_REQUESTS", true) || raw.contains("quota", true) ->
+                "Too many attempts. Try again later, or use email."
+
+            raw.contains("INVALID_PHONE_NUMBER", true) ->
+                "That phone number doesn't look right. Include the area code."
+
+            raw.contains("NETWORK", true) ->
+                "Couldn't reach the network. Check your connection."
+
+            raw.isBlank() -> "Phone sign-up failed. Try email instead."
+            else -> raw
+        }
+    }
+
+    // ------------------------------------------------- full-screen alerting
+
+    /**
+     * Android 14 (API 34) took `USE_FULL_SCREEN_INTENT` away from everything that is not
+     * a calling or alarm app. Declaring it in the manifest is no longer enough, and when
+     * it is denied a Red alert produces a looping alarm behind a notification the user
+     * may never look at. Older releases grant it from the manifest alone.
+     */
+    override fun canUseFullScreenIntent(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
+        val manager = appContext.getSystemService(NotificationManager::class.java) ?: return false
+        return runCatching { manager.canUseFullScreenIntent() }.getOrDefault(false)
+    }
+
+    override fun openFullScreenIntentSettings() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            openNotificationSettings()
+            return
+        }
+        val intent = Intent(
+            Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+            Uri.parse("package:${appContext.packageName}"),
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        // Not every OEM ships that screen; fall back rather than throwing at the user.
+        runCatching { appContext.startActivity(intent) }.onFailure { openNotificationSettings() }
+    }
+
+    override fun openNotificationSettings() {
+        runCatching {
+            appContext.startActivity(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, appContext.packageName)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+    }
+
+    override fun notificationsEnabled(): Boolean =
+        runCatching { NotificationManagerCompat.from(appContext).areNotificationsEnabled() }
+            .getOrDefault(true)
 }

@@ -46,6 +46,7 @@ import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.SirenTheme
 import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.util.DateFmt
+import com.siren.mobile.util.asGSpaced
 import com.siren.mobile.util.tabular
 
 private enum class HistoryFilter(val label: String) {
@@ -162,6 +163,14 @@ private fun HistoryRow(alert: AlertRecord, response: SafetyResponse?) {
                     style = MaterialTheme.typography.titleMedium.tabular(),
                     color = tint,
                     fontWeight = FontWeight.Bold,
+                )
+                // The reading behind the band, smaller and directly beneath it. These
+                // rows double as the study's evaluation data, where the exact figure
+                // matters more than anywhere else in the app.
+                Text(
+                    alert.magnitudeG.asGSpaced(3),
+                    style = MaterialTheme.typography.labelSmall.tabular(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 when (response?.status) {
                     ResponseStatus.SAFE -> ResponseTag("Safe", Icons.Filled.CheckCircle, status.safe, status.safeContainer)

@@ -53,10 +53,14 @@ kotlin {
             // Only for the system back button; the rest of the UI is common.
             implementation(libs.androidx.activity.compose)
             implementation(libs.androidx.core.ktx)
-            // GitLive does not wrap Cloud Messaging, so the topic subscription and
-            // notification building stay platform-specific.
+            // GitLive wraps neither Cloud Messaging nor PhoneAuthProvider, so the topic
+            // subscription, notification building and SMS verification are all
+            // platform-specific. The native auth SDK is the same instance GitLive's
+            // Firebase.auth delegates to, so a phone sign-in here still lands in
+            // SirenRepository's authStateChanged listener.
             implementation(project.dependencies.platform(libs.firebase.bom))
             implementation(libs.firebase.messaging)
+            implementation(libs.firebase.auth)
         }
     }
 }

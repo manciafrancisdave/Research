@@ -21,6 +21,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import com.siren.mobile.data.SirenRepository
 import com.siren.mobile.model.Intensity
 import com.siren.mobile.model.ResponseStatus
@@ -75,6 +76,7 @@ class SirenAlarmService : Service() {
 
     private var player: MediaPlayer? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var screenLock: PowerManager.WakeLock? = null
     private var focusRequest: AudioFocusRequest? = null
     private var currentAlertId: String? = null
     private val handler = Handler(Looper.getMainLooper())
@@ -134,9 +136,15 @@ class SirenAlarmService : Service() {
         currentAlertId = alertId
         shouldRun = true
         ensureChannel()
-        startInForeground(alertId, intensity, magnitude)
+        if (!startInForeground(alertId, intensity, magnitude)) {
+            // The OS refused to let us go foreground. Everything below assumes a live
+            // foreground service, and continuing would earn an ANR five seconds later.
+            stopSelf()
+            return
+        }
 
         acquireWakeLock()
+        if (intensity != Intensity.GREEN) wakeScreen()
         requestFocus(intensity)
         startPlayback(intensity)
         if (vibrate) startVibration(intensity)
@@ -231,6 +239,32 @@ class SirenAlarmService : Service() {
         }
     }
 
+    /**
+     * Lights the display so the alert is actually seen, not just heard.
+     *
+     * `PARTIAL_WAKE_LOCK` above keeps the CPU alive for playback but leaves the screen
+     * off. `ACQUIRE_CAUSES_WAKEUP` is the only mechanism that still turns a dark phone's
+     * display on from a service; it is deprecated in favour of the activity flags
+     * MainActivity sets, but those only take effect once the full-screen intent has
+     * actually launched the activity — and on Android 14 that intent may be denied
+     * outright. This is the fallback for exactly that case, held for 30 seconds so it
+     * cannot flatten a battery if the event goes unanswered.
+     */
+    @Suppress("DEPRECATION")
+    private fun wakeScreen() {
+        runCatching {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            if (pm.isInteractive) return
+            screenLock = pm.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "siren:alarm-screen",
+            ).apply {
+                setReferenceCounted(false)
+                acquire(30 * 1000L)
+            }
+        }
+    }
+
     // -------------------------------------------------------- notification
 
     private fun ensureChannel() {
@@ -261,7 +295,8 @@ class SirenAlarmService : Service() {
         )
     }
 
-    private fun startInForeground(alertId: String, intensity: Intensity, magnitude: Double) {
+    /** @return false when the OS refused the foreground start, so the caller can bail. */
+    private fun startInForeground(alertId: String, intensity: Intensity, magnitude: Double): Boolean {
         val open = activityClass?.let {
             PendingIntent.getActivity(
                 this,
@@ -297,10 +332,30 @@ class SirenAlarmService : Service() {
         }
 
         val notification = builder.build()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+
+        // Android 12+ throws ForegroundServiceStartNotAllowedException when a service is
+        // started from the background outside an exemption. The Firestore listener path
+        // can hit that — the push path is exempt because it arrives on a high-priority
+        // FCM message. Letting it propagate would crash the process during an
+        // earthquake, so it is caught, and a plain heads-up notification is posted
+        // instead: no looping audio, but the user is still told.
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Foreground start refused; falling back to a notification", e)
+            runCatching {
+                NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, notification)
+            }
+            false
         }
     }
 
@@ -335,6 +390,8 @@ class SirenAlarmService : Service() {
 
         runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
         wakeLock = null
+        runCatching { if (screenLock?.isHeld == true) screenLock?.release() }
+        screenLock = null
 
         currentAlertId = null
         Platform.setAlarmActive(false)

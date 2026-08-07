@@ -166,12 +166,21 @@ subscribes instead. Consolidate once the FirebaseMessaging pod is linked.
 Red alerts should bypass silent mode. Apple grants that entitlement only on request;
 until then `defaultCriticalSound()` degrades to a normal sound.
 
-### 4. Optional cleanups
+### 4. Enable phone sign-up in the Firebase console ⚠️
+
+The Android code path is complete and unexercised. Until the Blaze plan, the release
+SHA-256 and the Phone provider are all in place, tapping "Sign up with Phone" reaches a
+specific, actionable error and nothing more. See **Authentication → Phone sign-up**.
+
+### 5. Optional cleanups
 
 - `app/src/main/res/drawable/ic_phone_outline.xml` and `ic_brand_tile.xml` may now be
   unused — check before deleting
 - `Platform.services.clearNotifications()` and `vibrateTap()` are implemented but not
   called anywhere yet
+- `Yellow` still steps down after 30 s by design, while Red loops until dismissed. If
+  the intent is for *every* level to ring until acknowledged, that is a one-line change
+  in `AndroidPlatformServices.startAlarm` (`EXTRA_TIMEOUT_MS`)
 
 ---
 
@@ -209,42 +218,106 @@ Because MP3 carries encoder padding, its loop point is not perfectly gapless. A
 2-second watchdog in the service restarts playback if it ever stalls, so the alarm
 cannot fall silent while an event is unanswered.
 
+### Waking a dark, locked phone
+
+A full-screen intent launches `MainActivity`, but on a locked device that alone puts it
+*behind* the keyguard with the screen still off — the alarm sounds and nothing is
+visible. Three things address that, and all three are needed:
+
+- `android:showWhenLocked` / `android:turnScreenOn` **in the manifest**, because the
+  attributes apply to the launch itself; setting them only in `onCreate` is too late
+- the same two set again in code, plus `FLAG_KEEP_SCREEN_ON`, when the activity is opened
+  from an alert
+- `SirenAlarmService.wakeScreen()` — a `SCREEN_BRIGHT_WAKE_LOCK or ACQUIRE_CAUSES_WAKEUP`
+  held for 30 s. Deprecated, and the only mechanism that still lights a display from a
+  service. It is the fallback for when the full-screen intent is **denied outright**,
+  which Android 14 does by default.
+
+The keyguard is only asked to dismiss when it is **not** secured. `requestDismissKeyguard`
+on a PIN-locked phone prompts for the PIN, which is the last thing to put between someone
+and an earthquake warning. Showing over the lock screen is enough, and the notification's
+I'm safe / I need help actions work from there.
+
+### Two OS grants that fail silently
+
+Notifications being off, and full-screen alerts being denied, both produce *no error*:
+the first means no alert ever arrives, the second means a Red event sounds the alarm with
+nothing on screen to explain it. Settings reads both back
+(`notificationsEnabled()` / `canUseFullScreenIntent()`) and links to the OS screen that
+changes them. That is the only way a user finds out.
+
+### The push payload must be data-only
+
+`onMessageReceived` is **not called for a `notification`-payload push while the app is
+killed** — the system tray draws it and the app never runs, so no alarm sounds. The
+sender must use a **data-only, `priority: high`** message carrying `alertId`, `intensity`
+and `magnitudeG`. A high-priority FCM message is also what exempts the foreground-service
+start from Android 12+ background restrictions. `SirenMessagingService` logs loudly when
+a push arrives without an `alertId`, because that misconfiguration is otherwise invisible.
+
+`startInForeground` returns a Boolean and the service bails if the OS refused, posting a
+plain notification instead. Letting `ForegroundServiceStartNotAllowedException` propagate
+would crash the process during an earthquake.
+
 Simulated (Demo Mode) events always render a `DEMO — NOT A REAL EVENT` badge on the
 full-screen alert. A simulation that is indistinguishable from a real earthquake would
 be a serious failure during a defence.
 
 ## Authentication
 
-Firebase **Email/Password**. Anonymous sign-in was used in v1.0 and has been removed —
-it lost accounts on reinstall, breaking parent links and history.
+Firebase **Email/Password** and **Phone**. Anonymous sign-in was used in v1.0 and has
+been removed — it lost accounts on reinstall, breaking parent links and history.
 
 - Role is chosen **before** the account exists, then written into the user document
-- Role is **fixed at sign-up and cannot be changed in the app.** Settings has no
-  "Switch role" entry. `SirenRepository.updateRole` still exists for administrative
-  correction from outside the UI, but nothing calls it — do not re-expose it without
-  asking. (Note this reverses the prototype, which offered role switching.)
+- **A fresh install opens on Create Account, not Login.** Somebody who has just
+  downloaded the app has no credentials, so a login form asks for something that does
+  not exist yet. `SirenSettings.hasAccount` (persisted in the settings JSON) flips the
+  entry point to Login once an account has been created or signed into on the device.
+  It defaults to false, so pre-existing installs see Create Account once — the harmless
+  direction to be wrong in.
+- **Role can be changed in Settings → Switch role.** This reverses the v2.x freeze:
+  the sign-up screen told users the role could be changed later and Settings had nowhere
+  to do it, so the app was simply lying. Switching *to* Student mints a `shortCode` if
+  the account has never had one, or the student is invisible to parents and advisers.
+- **Profile is editable** in Settings → Edit profile (name, class, mobile). A name typed
+  wrong at sign-up used to be permanent, and that name is what an adviser reads off the
+  roll call.
 - The **ESP32 has its own account** and writes alert documents directly; the app only listens
 
-### Phone sign-in — deferred, not abandoned
+### Phone sign-up
 
-Sign-in by phone number was specced and deliberately **postponed**. Email/Password is
-the only provider. Nothing in the codebase references phone auth, so there is nothing
-to switch off — this note exists so the decision is not mistaken for an oversight.
+Implemented on **Android only**, through `PlatformServices.sendPhoneCode` /
+`confirmPhoneCode` — the same seam Cloud Messaging uses, because GitLive KMP 2.5.0 wraps
+neither. The native `com.google.firebase:firebase-auth` SDK backs it, and because
+GitLive's `Firebase.auth` delegates to that same instance, a phone sign-in still lands in
+`SirenRepository`'s `authStateChanged` listener with no extra plumbing.
 
-It is blocked on three things outside the code, all of which have to happen in the
-Firebase console before a line is worth writing:
+`PhoneAuthProvider.verifyPhoneNumber` needs a real **Activity** for its reCAPTCHA
+fallback, which `AndroidPlatformServices` does not have — `SirenApp` tracks the
+foreground activity through `ActivityLifecycleCallbacks` and passes it in as a lambda.
+
+Android can also verify a SIM without any code being typed (`onVerificationCompleted`
+fires immediately). `PhoneCodeRequest.AutoVerified` covers that: the user is already
+signed in, so the code field is skipped and `completeAutoVerifiedPhone` writes the
+profile. Miss that path and the account exists with no user document, and the app sits
+on the "profile loading" spinner forever.
+
+**It cannot send a single SMS until three things are done in the Firebase console**, and
+all three fail at runtime rather than at build time:
 
 1. **Blaze plan.** Phone auth is unavailable on Spark, and every verification SMS is
    billed per message.
-2. **SHA-256 fingerprint** registered against the Android app, or device verification
-   fails and falls back to reCAPTCHA.
-3. **Phone enabled** under Authentication → Sign-in method (plus an APNs key before
-   iOS could ever use it).
+2. **SHA-256 fingerprint** of the *release* signing key registered against the Android
+   app, or device verification fails and falls back to reCAPTCHA.
+3. **Phone enabled** under Authentication → Sign-in method.
 
-One open technical question when it is picked up: GitLive KMP 2.5.0 may not wrap
-`PhoneAuthProvider`. If it does not, phone auth needs platform-specific code behind a
-`PlatformServices` method on both Android and iOS — the same pattern already used for
-Cloud Messaging, which GitLive also does not wrap.
+`AndroidPlatformServices.phoneAuthMessage` maps each of those failures to a specific
+sentence ending in "use email instead", because the raw SDK text is unreadable and the
+fix is never in the app.
+
+iOS reports `phoneAuthSupported = false`, which hides the option entirely: the
+FirebaseAuth pod is not linked, and silent-push device verification needs an APNs key
+that requires the paid Apple Developer account the project does not have.
 
 ## Emergency contacts
 
@@ -260,19 +333,49 @@ screen — and only when something is actually missing.
 
 ## User roles
 
-- **Student** — receives alerts, submits own status, gets a 6-char `shortCode`
-- **Teacher / School Admin** — roster for their `classId`, live roll-call, close events
-- **Parent / Guardian** — status of students in `linkedStudentIds`
+- **Student** — receives alerts, submits own status, gets a 6-char `shortCode`,
+  confirms or declines guardian link requests
+- **Teacher / School Admin** — roster for their `classId`, live roll-call, close events,
+  **adds students to their class by linking code**
+- **Parent / Guardian** — status of students in `linkedStudentIds`, once each student
+  has confirmed the link
 
-## Screens (16)
+### Guardian linking needs the student's confirmation
+
+A parent typing a code raises a **request**; it is not a link until the student approves
+it. The code is six characters and gets read aloud across a classroom, and before this
+anyone who overheard one could attach themselves to that student's live safety feed with
+the student never being told.
+
+The commit is split across the two clients because Firestore only lets each user write
+their own document: the **student** sets `status`, and the **parent's** client sees the
+approval and adds the id to its own `linkedStudentIds` (`adoptApprovedLinks`). A decline
+removes it again, which is also how revocation works from either side.
+
+Advisers are deliberately **not** gated this way — a teacher adding a student to their
+own class is an authoritative school act, and it writes `classId` on the student
+directly.
+
+### The adviser roster used to be unreachable
+
+`classId` drives the entire roster, and until now **nothing in the app ever set one**.
+Every teacher account shipped with a blank class, so the roll call was permanently empty
+and the empty state told advisers to "ask the school registrar", who has no tool either.
+Both halves now exist: the class name is set in Edit profile, and students are added with
+their linking code.
+
+## Screens (18)
 
 Splash · Login · Role Selection · Sign-up · Parent Linking · Student Dashboard ·
 Teacher Dashboard · Parent Dashboard · Earthquake Alert · Safety Confirmation ·
 Live Safety Dashboard · Alert History · Demo Mode · Emergency Contacts · Settings ·
-Safety Guide
+Safety Guide · **Edit Profile** · **Parents & Guardians**
 
 Safety Guide is not in the prototype; it is carried over from the shipped v1.0 APK and
-uses the 28 recovered `ic_sg_*` pictograms.
+uses the 28 recovered `ic_sg_*` pictograms. It is reachable from **all three roles** —
+the student dashboard, the parent dashboard, the teacher roster and Settings. It was
+previously only linked from the student dashboard, so two of the three roles could not
+open it at all.
 
 ## Intensity thresholds
 
@@ -286,11 +389,20 @@ the phone disagree about what colour an earthquake is.
 | Yellow | Intensity V–VI · Moderate shaking | 0.010 – 0.120 g | 2 | Full-screen alert, repeating vibration |
 | Red | Intensity VII+ · Destructive shaking | ≥ 0.120 g | 3 | Alarm sound, continuous vibration, full-screen intent |
 
-**Users never see the g figure.** Every readout, notification and list row shows
-`Intensity.levelText` ("Intensity V–VI") instead — a student reading "0.12 g" mid-
-earthquake learns nothing, and intensity levels are the language drills already use.
-`magnitudeG` is still stored on every alert for the study's results, and is still shown
-on the Demo screen, which is a developer surface.
+**Intensity leads, the g figure follows.** Every readout shows `Intensity.levelText`
+("Intensity V–VI") large and first, with the measured peak ground acceleration
+underneath it in smaller type as `0.xxx g` — `asGSpaced(3)`, three decimals because the
+Green band is only 0.010 g wide and two decimals would render a 0.005 g reading as the
+Yellow boundary.
+
+v2.6 hid the g value completely. That went too far: it is the study's actual
+measurement, and it was invisible inside the app that collected it. The ordering is what
+matters — a student mid-earthquake acts on "Intensity V–VI", and whoever is reading the
+numbers gets the precise figure without it competing for attention.
+
+It appears on the full-screen alert, the student status panel, history rows, the live
+roll-call header, the safety-confirmation screen and both platforms' notification
+bodies. The Demo screen shows it via `asG(3)` as before.
 
 ## Theme
 
@@ -308,7 +420,7 @@ contacts. Do not tighten it.
 
 ```
 users/{userId}
-  name, email, role ("student"|"teacher"|"parent")
+  name, email, phone, role ("student"|"teacher"|"parent")
   classId, schoolId
   shortCode          # students only — the parent linking code
   linkedStudentIds[] # parents only
@@ -322,7 +434,25 @@ alerts/{alertId}
 
 alerts/{alertId}/responses/{userId}
   userId, name, status ("safe"|"needs_help"|"no_response"), respondedAt
+
+linkRequests/{studentId}_{parentId}
+  studentId, studentName, parentId, parentName, parentContact
+  status ("pending"|"approved"|"declined"), requestedAt, respondedAt
 ```
+
+`linkRequests` is **top-level with both ids denormalised onto it**, so each side watches
+its own view with a *single* equality filter — `studentId ==` for the student,
+`parentId ==` for the parent. Adding a second filter on `status` is the obvious next step
+and would drag a composite index in behind it, so status is filtered client-side; these
+lists are a handful of documents. The document id is always `{studentId}_{parentId}`,
+which makes the relationship unique by construction and lets a re-request after a decline
+overwrite rather than pile up a second row the student has to dismiss twice.
+
+**Firestore rules note.** Two writes here cross user boundaries: a parent creates a
+`linkRequests` document, and an adviser sets `classId` on a *student's* user document.
+Both work under permissive/test rules. If rules are ever tightened to "each user writes
+only their own document", the adviser flow needs a rule allowing a teacher to write
+`classId` on a student, or it will fail silently at the write.
 
 Enums serialise lower-case via their `wire` property. Always read through
 `Role.fromName` / `Intensity.fromName` — they fall back safely. Documents map through

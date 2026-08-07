@@ -23,11 +23,14 @@ enum class Role(val label: String, val blurb: String) {
 /**
  * Intensity bands follow the campus ESP32 accelerometer calibration used in the study.
  *
- * Users are shown [scale] and [shaking] — "Intensity V–VI · Moderate shaking" — never
- * the raw g figure. A student reading "0.12 g" on a phone during an earthquake learns
- * nothing; an intensity level is the language drills and PHIVOLCS advisories already
- * use. The g value is still stored on every alert for the study's results, and still
- * shown on the Demo screen, which is a developer surface.
+ * [scale] and [shaking] lead every readout — "Intensity V–VI · Moderate shaking" —
+ * because an intensity level is the language drills and PHIVOLCS advisories already use,
+ * and it is what somebody mid-earthquake can act on. The measured peak ground
+ * acceleration is shown **underneath it, in smaller type**, to three decimals: it is the
+ * study's actual measurement, and hiding it entirely (as v2.6 did) left the evaluation
+ * data invisible inside the app that collected it.
+ *
+ * The ordering is the point. Intensity first and large, `0.xxx g` second and small.
  *
  * These thresholds MUST stay in lockstep with BAND_YELLOW_G / BAND_RED_G in the ESP32
  * firmware. If one side changes and the other does not, the hardware and the phone
@@ -106,6 +109,46 @@ enum class AlertSource(val label: String) {
     }
 }
 
+/**
+ * Where a guardian link has got to.
+ *
+ * A parent typing a student's code no longer links the account outright — it raises a
+ * request the student has to approve. The code is six characters and gets passed around
+ * a classroom; without this step anyone who saw one could start following that student's
+ * live location-of-safety status, and the student would never know it had happened.
+ */
+enum class LinkRequestStatus(val label: String) {
+    PENDING("Awaiting confirmation"),
+    APPROVED("Confirmed"),
+    DECLINED("Declined");
+
+    val wire: String get() = name.lowercase()
+
+    companion object {
+        fun fromName(name: String?): LinkRequestStatus =
+            entries.firstOrNull { it.name.equals(name?.trim(), ignoreCase = true) } ?: PENDING
+    }
+}
+
+/**
+ * One parent/guardian asking to follow one student.
+ *
+ * Held top-level rather than under either user so both sides can watch it with a single
+ * equality filter — `parentId ==` for the parent, `studentId ==` for the student — and
+ * neither query needs a composite index.
+ */
+data class LinkRequest(
+    val id: String,
+    val studentId: String,
+    val studentName: String,
+    val parentId: String,
+    val parentName: String,
+    val parentContact: String = "",
+    val status: LinkRequestStatus = LinkRequestStatus.PENDING,
+    val requestedAt: Long = 0L,
+    val respondedAt: Long? = null,
+)
+
 data class AlertRecord(
     val id: String,
     val intensity: Intensity,
@@ -128,6 +171,8 @@ data class UserProfile(
     val uid: String,
     val name: String,
     val email: String = "",
+    /** Set for accounts created with phone sign-up; blank for email accounts. */
+    val phone: String = "",
     val role: Role = Role.STUDENT,
     val classId: String = "",
     val schoolId: String = "",
@@ -135,6 +180,9 @@ data class UserProfile(
     val shortCode: String = "",
     val linkedStudentIds: List<String> = emptyList(),
 ) {
+    /** Whichever of email/phone the account actually has, for display. */
+    val contact: String get() = email.ifBlank { phone }
+
     val initials: String
         get() = name.trim().split(Regex("\\s+"))
             .filter { it.isNotEmpty() }
@@ -201,4 +249,13 @@ data class SirenSettings(
     val criticalAlerts: Boolean = true,
     val vibration: Boolean = true,
     val contacts: List<EmergencyContact> = DefaultEmergencyContacts,
+    /**
+     * False until an account has been created or signed into on this device once.
+     *
+     * A first-time install opens on Create Account rather than Login: somebody who has
+     * just downloaded the app has nothing to sign in with, and landing on a login form
+     * asks them for credentials that do not exist yet. Once they have an account the
+     * order flips back, because from then on signing in is the common case.
+     */
+    val hasAccount: Boolean = false,
 )

@@ -38,6 +38,8 @@ import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.Pill
 import com.siren.mobile.ui.components.PrimaryButton
 import com.siren.mobile.util.DateFmt
+import com.siren.mobile.util.asGSpaced
+import com.siren.mobile.util.tabular
 import com.siren.mobile.ui.theme.Danger
 import com.siren.mobile.ui.theme.DangerTint
 import com.siren.mobile.ui.theme.Ink
@@ -76,6 +78,12 @@ fun SafetyConfirmationScreen(
             text = "ACTIVE EVENT · ${alert.intensity.levelText.uppercase()}",
             fg = Danger,
             bg = DangerTint,
+        )
+
+        Text(
+            "Peak ground acceleration ${alert.magnitudeG.asGSpaced(3)}",
+            style = MaterialTheme.typography.labelSmall.tabular(),
+            color = InkSubtle,
         )
 
         if (myResponse == null) {

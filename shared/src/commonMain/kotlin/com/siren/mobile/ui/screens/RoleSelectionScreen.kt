@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FamilyRestroom
@@ -19,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,24 +44,31 @@ import com.siren.mobile.ui.theme.Space
 /**
  * Prototype screen 03. The role is chosen before the account exists, so it can be
  * written into the user document at sign-up.
+ *
+ * This is now the **first** screen a fresh install shows. Somebody who has just
+ * downloaded the app has no credentials to sign in with, so opening on a login form asks
+ * them for something that does not exist yet; sign-in leads from here instead, and takes
+ * over as the opening screen once an account exists on the device.
  */
 @Composable
 fun RoleSelectionScreen(
     onContinue: (Role) -> Unit,
-    onBack: () -> Unit,
+    onSignIn: () -> Unit,
+    onBack: (() -> Unit)? = null,
 ) {
     var selected by remember { mutableStateOf(Role.STUDENT) }
 
     Column(
         Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = Layout.screenPadding),
         verticalArrangement = Arrangement.spacedBy(Space.m),
     ) {
-        ScreenHeader(title = "Choose your role", onBack = onBack)
+        ScreenHeader(title = "Create your account", onBack = onBack)
 
         Text(
-            "This decides which alerts you receive and what you can do during an event. You can change it later in Settings.",
+            "Choose your role. This decides which alerts you receive and what you can do during an event. You can change it later in Settings.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -86,12 +96,26 @@ fun RoleSelectionScreen(
             selected = selected == Role.PARENT,
         ) { selected = Role.PARENT }
 
-        Box(Modifier.weight(1f))
+        Box(Modifier.padding(top = Space.xs))
 
         PrimaryButton(
             text = "Continue as ${selected.label.substringBefore(" /")}",
             onClick = { onContinue(selected) },
         )
+
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Already have an account?",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(onClick = onSignIn) { Text("Sign in") }
+        }
+
         Text(
             "Your role is saved to your account when you sign up.",
             style = MaterialTheme.typography.labelSmall,
@@ -99,7 +123,7 @@ fun RoleSelectionScreen(
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = Space.s, bottom = Space.xl),
+                .padding(bottom = Space.xl),
         )
     }
 }

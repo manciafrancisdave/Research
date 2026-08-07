@@ -1,6 +1,7 @@
 package com.siren.mobile.platform
 
 import com.siren.mobile.model.Intensity
+import com.siren.mobile.util.asGSpaced
 import platform.AVFAudio.AVAudioPlayer
 import platform.AVFAudio.AVAudioSession
 import platform.AVFAudio.AVAudioSessionCategoryPlayback
@@ -12,6 +13,7 @@ import platform.Foundation.NSURL
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.timeIntervalSince1970
 import platform.UIKit.UIApplication
+import platform.UIKit.UIApplicationOpenSettingsURLString
 import platform.UIKit.UIImpactFeedbackGenerator
 import platform.UIKit.UIImpactFeedbackStyle
 import platform.UIKit.UINotificationFeedbackGenerator
@@ -145,16 +147,21 @@ class IosPlatformServices(
     }
 
     override fun showAlertNotification(alertId: String, intensity: Intensity, magnitudeG: Double) {
-        // Intensity level, not raw g — matches Android and the in-app readouts.
+        // Intensity leads and the acceleration trails it, matching Android and the
+        // in-app readouts.
         val level = intensity.levelText
+        val reading = magnitudeG.asGSpaced(3)
         val content = UNMutableNotificationContent().apply {
             setTitle(
                 if (intensity == Intensity.GREEN) "Minor tremor detected — $level"
                 else "Earthquake detected — $level"
             )
             setBody(
-                if (intensity == Intensity.GREEN) "No action needed. Logged for the record."
-                else "Drop, cover, hold on. Tap to confirm your status."
+                if (intensity == Intensity.GREEN) {
+                    "No action needed. Logged for the record. Peak ground acceleration $reading."
+                } else {
+                    "Drop, cover, hold on. Tap to confirm your status. Peak ground acceleration $reading."
+                }
             )
             setSound(
                 if (intensity == Intensity.RED) UNNotificationSound.defaultCriticalSound()
@@ -206,4 +213,49 @@ class IosPlatformServices(
 
     override fun nowMillis(): Long =
         (NSDate().timeIntervalSince1970 * 1000.0).toLong()
+
+    // ------------------------------------------------------------ phone auth
+
+    /**
+     * Off on iOS, deliberately.
+     *
+     * `PhoneAuthProvider` lives in the FirebaseAuth *pod*, which this target does not
+     * link — the iOS host has never been compiled at all (see the class header). It also
+     * needs an APNs key uploaded to Firebase for silent-push device verification, which
+     * requires the paid Apple Developer account the project does not have yet. Reporting
+     * false hides the option instead of offering a sign-up route that cannot complete.
+     *
+     * TODO(mac): implement with `PhoneAuthProvider.provider().verifyPhoneNumber` once
+     * the pod is linked and an APNs key is uploaded.
+     */
+    override val phoneAuthSupported: Boolean = false
+
+    override suspend fun sendPhoneCode(phoneE164: String): PhoneCodeRequest =
+        PhoneCodeRequest.Failed("Phone sign-up isn't available on iOS yet. Use email.")
+
+    override suspend fun confirmPhoneCode(
+        verification: PhoneVerification,
+        code: String,
+    ): PhoneVerification.Result =
+        PhoneVerification.Result.Failed("Phone sign-up isn't available on iOS yet. Use email.")
+
+    // ------------------------------------------------- full-screen alerting
+
+    /**
+     * iOS has no full-screen-intent equivalent to gate, so there is nothing to report as
+     * missing. Critical alerts are the nearest thing and are governed by the entitlement
+     * discussed on [startAlarm].
+     */
+    override fun canUseFullScreenIntent(): Boolean = true
+
+    override fun openFullScreenIntentSettings() = openAppSettings()
+
+    override fun openNotificationSettings() = openAppSettings()
+
+    private fun openAppSettings() {
+        val url = NSURL.URLWithString(UIApplicationOpenSettingsURLString) ?: return
+        UIApplication.sharedApplication.openURL(url, emptyMap<Any?, Any>()) { }
+    }
+
+    override fun notificationsEnabled(): Boolean = true
 }

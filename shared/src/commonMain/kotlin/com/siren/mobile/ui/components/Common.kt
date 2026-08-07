@@ -697,12 +697,14 @@ fun SirenField(
     supportingText: String? = null,
     isError: Boolean = false,
     placeholder: String? = null,
+    enabled: Boolean = true,
 ) {
     var revealed by remember { mutableStateOf(false) }
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier.fillMaxWidth(),
+        enabled = enabled,
         label = { Text(label) },
         placeholder = placeholder?.let { { Text(it) } },
         shape = RoundedCornerShape(Layout.field),

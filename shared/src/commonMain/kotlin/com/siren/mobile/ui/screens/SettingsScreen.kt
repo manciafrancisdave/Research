@@ -12,14 +12,21 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ContactEmergency
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.ManageAccounts
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.PrivacyTip
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +50,8 @@ import com.siren.mobile.model.Role
 import com.siren.mobile.model.SirenSettings
 import com.siren.mobile.model.UserProfile
 import com.siren.mobile.ui.components.Avatar
+import com.siren.mobile.ui.components.BannerTone
+import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.ListGroup
 import com.siren.mobile.ui.components.ListRow
 import com.siren.mobile.ui.components.RowDivider
@@ -58,12 +67,21 @@ fun SettingsScreen(
     user: UserProfile,
     settings: SirenSettings,
     versionName: String,
+    fullScreenAlertsAllowed: Boolean,
+    notificationsAllowed: Boolean,
     onUpdateSettings: ((SirenSettings) -> SirenSettings) -> Unit,
     onOpenContacts: () -> Unit,
+    onOpenGuide: () -> Unit,
+    onEditProfile: () -> Unit,
+    onChangeRole: (Role) -> Unit,
+    onFixFullScreenAlerts: () -> Unit,
+    onFixNotifications: () -> Unit,
     onSignOut: () -> Unit,
     onBack: (() -> Unit)? = null,
 ) {
     var signOutDialog by remember { mutableStateOf(false) }
+    var roleDialog by remember { mutableStateOf(false) }
+    var pendingRole by remember { mutableStateOf<Role?>(null) }
 
     Column(
         Modifier
@@ -80,9 +98,17 @@ fun SettingsScreen(
                 subtitle = listOfNotNull(
                     user.role.label,
                     user.classId.ifBlank { null },
-                    user.email.ifBlank { null },
+                    user.contact.ifBlank { null },
                 ).joinToString(" · "),
+                onClick = onEditProfile,
                 leading = { Avatar(user.initials) },
+                trailing = {
+                    Icon(
+                        Icons.Filled.ChevronRight,
+                        contentDescription = "Edit profile",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
             )
         }
 
@@ -118,7 +144,7 @@ fun SettingsScreen(
                             letterSpacing = 4.sp,
                         )
                         Text(
-                            "Give this to your parent or guardian so they can follow your safety status.",
+                            "Give this to your parent or guardian, or to your adviser. You'll be asked to confirm before a guardian can follow your safety status.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                         )
@@ -144,13 +170,70 @@ fun SettingsScreen(
             ) { v -> onUpdateSettings { it.copy(vibration = v) } }
         }
 
+        // Both of these are OS-level grants the app cannot set for itself, and both fail
+        // silently: notifications off means no alert ever arrives, and full-screen
+        // alerts denied means a Red event sounds the alarm with nothing on screen to
+        // explain it. Surfacing them here is the only way a user finds out.
+        if (!notificationsAllowed) {
+            InfoBanner(
+                "Notifications are switched off for S.I.R.E.N. You will not be warned of an earthquake until you turn them back on.",
+                Icons.Filled.NotificationsOff,
+                tone = BannerTone.Danger,
+            )
+            ListGroup {
+                NavRow(
+                    Icons.Filled.NotificationsOff,
+                    "Turn on notifications",
+                    "Opens Android settings",
+                    onFixNotifications,
+                )
+            }
+        }
+
+        if (!fullScreenAlertsAllowed) {
+            InfoBanner(
+                "Full-screen alerts are blocked, so a severe event will sound the alarm without taking over the screen. The alarm's notification buttons still work.",
+                Icons.Filled.Warning,
+                tone = BannerTone.Warn,
+            )
+            ListGroup {
+                NavRow(
+                    Icons.Filled.Fullscreen,
+                    "Allow full-screen alerts",
+                    "Opens Android settings",
+                    onFixFullScreenAlerts,
+                )
+            }
+        }
+
         SectionLabel("Account")
         ListGroup {
+            NavRow(
+                Icons.Filled.ManageAccounts,
+                "Edit profile",
+                "Name, class and mobile number",
+                onEditProfile,
+            )
+            RowDivider()
+            NavRow(
+                Icons.Filled.SwapHoriz,
+                "Switch role",
+                "Currently ${user.role.label}",
+                { roleDialog = true },
+            )
+            RowDivider()
             NavRow(
                 Icons.Filled.ContactEmergency,
                 "Emergency contacts",
                 "${settings.contacts.size} saved",
                 onOpenContacts,
+            )
+            RowDivider()
+            NavRow(
+                Icons.Filled.MenuBook,
+                "Safety guide",
+                "Drop, cover, hold and 27 more",
+                onOpenGuide,
             )
             RowDivider()
             NavRow(Icons.Filled.PrivacyTip, "Privacy & data", "How your responses are stored") {}
@@ -196,6 +279,68 @@ fun SettingsScreen(
                 }) { Text("Sign out") }
             },
             dismissButton = { TextButton(onClick = { signOutDialog = false }) { Text("Cancel") } },
+        )
+    }
+
+    if (roleDialog) {
+        AlertDialog(
+            onDismissRequest = { roleDialog = false },
+            title = { Text("Switch role") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+                    Text("Pick the role this account should use.")
+                    Role.entries.forEach { r ->
+                        ListRow(
+                            title = r.label,
+                            subtitle = r.blurb,
+                            onClick = {
+                                roleDialog = false
+                                if (r != user.role) pendingRole = r
+                            },
+                            trailing = {
+                                if (r == user.role) {
+                                    Icon(
+                                        Icons.Filled.CheckCircle,
+                                        contentDescription = "Current role",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            },
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { roleDialog = false }) { Text("Cancel") } },
+        )
+    }
+
+    // Switching role rearranges what the account can see and do, so it gets a second,
+    // explicit confirmation naming the consequence for the role being left behind.
+    pendingRole?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingRole = null },
+            title = { Text("Switch to ${target.label}?") },
+            text = {
+                Text(
+                    when (user.role) {
+                        Role.PARENT ->
+                            "Your linked children stay linked, but you'll stop seeing their safety status until you switch back."
+
+                        Role.TEACHER ->
+                            "You'll lose the roll call for your class until you switch back. Students stay assigned to it."
+
+                        Role.STUDENT ->
+                            "Your linking code stays valid, but guardians will not see a safety status from you while you are not a student."
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onChangeRole(target)
+                    pendingRole = null
+                }) { Text("Switch") }
+            },
+            dismissButton = { TextButton(onClick = { pendingRole = null }) { Text("Cancel") } },
         )
     }
 }

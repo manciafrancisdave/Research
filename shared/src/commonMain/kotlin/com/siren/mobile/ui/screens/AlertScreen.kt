@@ -48,6 +48,8 @@ import com.siren.mobile.ui.components.PrimaryButton
 import com.siren.mobile.ui.components.intensityBrush
 import com.siren.mobile.ui.components.intensityColor
 import com.siren.mobile.util.DateFmt
+import com.siren.mobile.util.asGSpaced
+import com.siren.mobile.util.tabular
 import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.Space
 
@@ -164,6 +166,16 @@ fun AlertScreen(
                         alert.intensity.shaking,
                         color = Color.White,
                         style = MaterialTheme.typography.titleMedium,
+                    )
+                    // The measured peak ground acceleration, deliberately small and
+                    // below the intensity. The intensity is what a student acts on; the
+                    // g figure is the precise reading behind it, and belongs to whoever
+                    // is reading the numbers rather than taking cover.
+                    Text(
+                        alert.magnitudeG.asGSpaced(3),
+                        color = Color.White.copy(alpha = 0.85f),
+                        style = MaterialTheme.typography.labelMedium.tabular(),
+                        modifier = Modifier.padding(top = Space.xxs),
                     )
                 }
 

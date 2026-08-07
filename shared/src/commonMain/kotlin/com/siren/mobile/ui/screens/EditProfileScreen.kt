@@ -1,0 +1,139 @@
+package com.siren.mobile.ui.screens
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Mail
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import com.siren.mobile.model.Role
+import com.siren.mobile.model.UserProfile
+import com.siren.mobile.ui.components.InfoBanner
+import com.siren.mobile.ui.components.PrimaryButton
+import com.siren.mobile.ui.components.SectionLabel
+import com.siren.mobile.ui.components.SirenField
+import com.siren.mobile.ui.theme.Layout
+import com.siren.mobile.ui.theme.Space
+
+/**
+ * Correcting the account details.
+ *
+ * A name typed wrong at sign-up used to be permanent, and that name is what an adviser
+ * reads off the roll call during an evacuation and what a parent looks for in their
+ * linked-children list — so it has to be fixable.
+ *
+ * Class is editable for advisers because the roster is keyed entirely on `classId`, and
+ * nothing in the app ever set one: every teacher account shipped with a blank class and
+ * therefore a permanently empty roll call.
+ */
+@Composable
+fun EditProfileScreen(
+    user: UserProfile,
+    working: Boolean,
+    onSave: (name: String, classId: String, phone: String) -> Unit,
+    onBack: () -> Unit,
+) {
+    var name by remember(user.uid) { mutableStateOf(user.name) }
+    var classId by remember(user.uid) { mutableStateOf(user.classId) }
+    var phone by remember(user.uid) { mutableStateOf(user.phone) }
+
+    val changed = name.trim() != user.name || classId.trim() != user.classId || phone.trim() != user.phone
+    val valid = name.isNotBlank()
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = Layout.screenPadding),
+        verticalArrangement = Arrangement.spacedBy(Space.m),
+    ) {
+        ScreenHeader(title = "Edit profile", onBack = onBack)
+
+        SectionLabel("Your details")
+
+        SirenField(
+            value = name,
+            onValueChange = { name = it },
+            label = "Full name",
+            leadingIcon = Icons.Filled.Person,
+            isError = name.isBlank(),
+            supportingText = if (name.isBlank()) {
+                "A name is required — it is what appears on the roll call"
+            } else {
+                null
+            },
+        )
+
+        SirenField(
+            value = classId,
+            onValueChange = { classId = it },
+            label = if (user.role == Role.TEACHER) "Class you advise" else "Class",
+            placeholder = "e.g. Grade 11 - Rizal",
+            leadingIcon = Icons.Filled.School,
+            supportingText = when (user.role) {
+                Role.TEACHER -> "Students you add with a linking code join this class."
+                Role.STUDENT -> "Your adviser sets this when they add you to their class."
+                Role.PARENT -> "Not used for guardian accounts."
+            },
+        )
+
+        SirenField(
+            value = phone,
+            onValueChange = { phone = it.filter { c -> c.isDigit() || c == '+' || c == ' ' } },
+            label = "Mobile number",
+            placeholder = "09XX XXX XXXX",
+            leadingIcon = Icons.Filled.Smartphone,
+            keyboardType = KeyboardType.Phone,
+            supportingText = "Optional. Used so the school can reach you during an event.",
+        )
+
+        // Changing the sign-in email would re-authenticate the Firebase account and
+        // invalidate the session mid-emergency, so it is shown but not editable.
+        if (user.email.isNotBlank()) {
+            SirenField(
+                value = user.email,
+                onValueChange = {},
+                label = "Sign-in email",
+                leadingIcon = Icons.Filled.Mail,
+                enabled = false,
+                supportingText = "Contact your adviser to change the email on your account.",
+            )
+        }
+
+        PrimaryButton(
+            text = "Save changes",
+            onClick = { onSave(name, classId, phone) },
+            enabled = valid && changed,
+            loading = working,
+        )
+
+        InfoBanner(
+            "Your name and class are visible to your adviser and to anyone linked to your account.",
+            Icons.Filled.Info,
+        )
+
+        Text(
+            "Signed in as ${user.role.label}.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        Box(Modifier.padding(bottom = Space.xxl))
+    }
+}

@@ -1,6 +1,7 @@
 package com.siren.mobile.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,9 +17,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContactEmergency
+import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VerifiedUser
@@ -37,11 +40,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.siren.mobile.model.AlertRecord
+import com.siren.mobile.model.LinkedPerson
 import com.siren.mobile.model.ResponseStatus
 import com.siren.mobile.model.SafetyResponse
 import com.siren.mobile.model.UserProfile
 import com.siren.mobile.platform.Platform
+import com.siren.mobile.ui.components.BannerTone
 import com.siren.mobile.ui.components.EmptyState
+import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.ListGroup
 import com.siren.mobile.ui.components.ListRow
 import com.siren.mobile.ui.components.OfflineBanner
@@ -56,6 +62,8 @@ import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.SirenTheme
 import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.util.DateFmt
+import com.siren.mobile.util.asGSpaced
+import com.siren.mobile.util.tabular
 
 /** Anything older than this stops dominating the home screen. */
 private const val ACTIVE_WINDOW_MS = 60L * 60L * 1000L
@@ -66,6 +74,8 @@ fun StudentDashboardScreen(
     user: UserProfile,
     alerts: List<AlertRecord>,
     myResponses: Map<String, SafetyResponse>,
+    guardians: List<LinkedPerson>,
+    pendingGuardianRequests: Int,
     online: Boolean,
     loading: Boolean,
     onOpenHistory: () -> Unit,
@@ -73,6 +83,7 @@ fun StudentDashboardScreen(
     onOpenDemo: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenGuide: () -> Unit,
+    onOpenGuardians: () -> Unit,
     onOpenAlert: (AlertRecord) -> Unit,
 ) {
     val latest = alerts.firstOrNull()
@@ -106,6 +117,23 @@ fun StudentDashboardScreen(
             item { OfflineBanner() }
         }
 
+        // Somebody is waiting to be confirmed as this student's guardian, and until they
+        // are they see nothing during an event. It outranks everything but a live alert.
+        if (pendingGuardianRequests > 0) {
+            item {
+                InfoBanner(
+                    text = if (pendingGuardianRequests == 1) {
+                        "Someone has asked to follow your safety status. Confirm it is really your parent or guardian."
+                    } else {
+                        "$pendingGuardianRequests people have asked to follow your safety status. Confirm who they are."
+                    },
+                    icon = Icons.Filled.PersonAdd,
+                    tone = BannerTone.Warn,
+                    modifier = Modifier.clickable(onClick = onOpenGuardians),
+                )
+            }
+        }
+
         item {
             StatusPanel(
                 latest = latest,
@@ -116,9 +144,31 @@ fun StudentDashboardScreen(
             )
         }
 
+        // Only while an event is live: outside one every guardian reads "No reply",
+        // which looks like a fault rather than the absence of a question.
+        if (active && guardians.isNotEmpty()) {
+            item { SectionHeader(title = "Your guardians", actionLabel = "Manage", onAction = onOpenGuardians) }
+            item {
+                ListGroup {
+                    guardians.forEachIndexed { i, person ->
+                        RosterRow(person)
+                        if (i < guardians.lastIndex) RowDivider()
+                    }
+                }
+            }
+        }
+
         item {
             ListGroup {
                 ActionRow(Icons.Filled.History, "Alert history", alertCountLabel(alerts.size), onOpenHistory)
+                RowDivider()
+                ActionRow(
+                    Icons.Filled.FamilyRestroom,
+                    "Parents & guardians",
+                    guardianLabel(guardians.size, pendingGuardianRequests),
+                    onOpenGuardians,
+                    badge = if (pendingGuardianRequests > 0) "$pendingGuardianRequests NEW" else null,
+                )
                 RowDivider()
                 ActionRow(Icons.Filled.MenuBook, "Safety guide", "Drop, cover, hold and 27 more", onOpenGuide)
                 RowDivider()
@@ -166,6 +216,14 @@ private fun alertCountLabel(count: Int): String = when (count) {
     0 -> "No events yet"
     1 -> "1 recorded event"
     else -> "$count recorded events"
+}
+
+private fun guardianLabel(linked: Int, pending: Int): String = when {
+    pending > 0 && linked > 0 -> "$linked linked · $pending waiting for you"
+    pending > 0 -> if (pending == 1) "1 request waiting for you" else "$pending requests waiting for you"
+    linked == 0 -> "Share your code to link a guardian"
+    linked == 1 -> "1 guardian following you"
+    else -> "$linked guardians following you"
 }
 
 /**
@@ -237,6 +295,12 @@ private fun StatusPanel(
                 latest.intensity.shaking,
                 style = MaterialTheme.typography.titleSmall,
                 color = onColor,
+            )
+            // Peak ground acceleration, under the intensity and smaller than it.
+            Text(
+                "Peak ground acceleration ${latest.magnitudeG.asGSpaced(3)}",
+                style = MaterialTheme.typography.labelSmall.tabular(),
+                color = onColorMuted,
             )
             Text(
                 "Detected ${DateFmt.clock(latest.detectedAt)} · ${latest.nodeId ?: latest.source.label}",

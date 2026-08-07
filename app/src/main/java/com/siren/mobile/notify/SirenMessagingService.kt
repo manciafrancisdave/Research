@@ -21,7 +21,20 @@ class SirenMessagingService : FirebaseMessagingService() {
         super.onMessageReceived(message)
 
         val data = message.data
-        val alertId = data["alertId"] ?: data["alert_id"] ?: return
+        // A push carrying only a `notification` block is drawn by the system tray and
+        // never reaches this method while the app is killed — which is the exact case
+        // the alarm exists for. The sender must therefore use a DATA-ONLY payload with
+        // priority "high". Bailing out quietly here is what that misconfiguration looks
+        // like from the phone's side, so it is logged rather than silently dropped.
+        val alertId = data["alertId"] ?: data["alert_id"]
+        if (alertId.isNullOrBlank()) {
+            Log.w(
+                "SirenMessaging",
+                "Push had no alertId (data=${data.keys}). Send a data-only, high-priority " +
+                    "message with alertId/intensity/magnitudeG or the alarm cannot fire.",
+            )
+            return
+        }
         val magnitude = (data["magnitudeG"] ?: data["magnitude_g"])?.toDoubleOrNull() ?: 0.0
         val intensity = data["intensity"]
             ?.let { Intensity.fromName(it) }

@@ -8,6 +8,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -20,6 +23,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -496,7 +500,26 @@ private fun AppContent() {
     ) {
         if (incoming != null) {
             var confirming by remember(incoming.id) { mutableStateOf(false) }
-            Box(Modifier.fillMaxSize()) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    // Opaque, and it swallows taps. Both matter.
+                    //
+                    // AlertScreen paints its own intensity gradient, so the missing
+                    // background only showed on SafetyConfirmationScreen — which drew
+                    // straight over whatever screen was behind it, stacking two headers
+                    // and rendering "Are you safe?" across the Demo list.
+                    //
+                    // The tap blocker is the more serious half: an overlay that does not
+                    // consume gestures lets them reach the screen underneath. Over Demo
+                    // mode that put "Trigger Red alert" live behind the confirmation
+                    // buttons, so answering a simulated event could fire another one.
+                    .background(MaterialTheme.colorScheme.background)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {},
+            ) {
                 if (confirming) {
                     SafetyConfirmationScreen(
                         alert = incoming,

@@ -69,6 +69,11 @@ fun SafetyConfirmationScreen(
     Column(
         Modifier
             .fillMaxSize()
+            // This screen is shown as a full-screen overlay above the current tab, so it
+            // has to paint its own background — without one it drew straight through
+            // onto whatever was behind it. Belt and braces with the overlay in App(),
+            // because a transparent safety prompt is unreadable exactly when it counts.
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = Layout.screenPadding),
         verticalArrangement = Arrangement.spacedBy(Space.l),
     ) {

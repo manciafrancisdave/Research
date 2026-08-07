@@ -332,11 +332,25 @@ on the "profile loading" spinner forever.
 **It cannot send a single SMS until three things are done in the Firebase console**, and
 all three fail at runtime rather than at build time:
 
-1. **Blaze plan.** Phone auth is unavailable on Spark, and every verification SMS is
-   billed per message.
-2. **SHA-256 fingerprint** of the *release* signing key registered against the Android
-   app, or device verification fails and falls back to reCAPTCHA.
+1. ~~**Blaze plan.**~~ **Done — the project is on Blaze.** Every verification SMS is
+   billed per message, so keep an eye on the quota during a defence demo.
+2. **SHA-256 fingerprint** registered against the Android app. Register **both**, or
+   phone sign-up works on one build and not the other:
+
+   | Build | SHA-256 |
+   |---|---|
+   | debug (`~/.android/debug.keystore`) | `28:6D:5C:E9:FB:00:D7:8C:7F:C5:87:18:F9:B4:ED:89:41:8B:6A:30:64:45:B7:D8:02:85:69:2F:09:34:79:BA` |
+   | release (`siren-release.jks`) | `16:EC:CC:66:64:B8:E7:4A:38:B8:75:37:5F:B1:C6:AE:00:D7:73:F4:85:AF:2E:03:32:43:64:C9:10:02:BC:3E` |
+
+   Registering only the release fingerprint is the classic mistake: every debug build
+   then fails with "This app is not authorized", which reads like a code fault.
+   Re-download `google-services.json` after adding them.
 3. **Phone enabled** under Authentication → Sign-in method.
+
+Read a fingerprint back off any APK with
+`apksigner verify --print-certs <apk>` — the release keystore does not have to be
+present, and `keytool -printcert -jarfile` returns nothing here because these APKs
+carry only a v2 signature, not a legacy JAR one.
 
 `AndroidPlatformServices.phoneAuthMessage` maps each of those failures to a specific
 sentence ending in "use email instead", because the raw SDK text is unreadable and the
@@ -345,6 +359,40 @@ fix is never in the app.
 iOS reports `phoneAuthSupported = false`, which hides the option entirely: the
 FirebaseAuth pod is not linked, and silent-push device verification needs an APNs key
 that requires the paid Apple Developer account the project does not have.
+
+## Profile pictures
+
+Stored as a **base64 JPEG on the user document**, not in Firebase Storage.
+
+That is a deliberate choice, not a workaround for the old billing limit. At 256px and
+quality 80 a photo encodes to roughly 20 KB against Firestore's 1 MiB document ceiling,
+and it arrives on the profile snapshot the app already listens to — so a roster of
+thirty faces costs zero extra reads and has no per-avatar loading state. Storage would
+add a bucket, a second set of security rules, download URLs to manage and a failure mode
+per image, to solve a problem this app does not have. Revisit only if pictures ever need
+to be bigger than a tile.
+
+Downscaling happens on the **platform** side of `PlatformServices`, in
+`ProfilePhotoEncoder`, because shared code cannot decode or re-encode an image and an
+unresized camera photo would be rejected by Firestore outright. Two stages, both
+load-bearing: `inSampleSize` decodes at reduced resolution so a 12-megapixel photo never
+becomes a full-size `Bitmap` (decoding one at full size just to shrink it is a routine
+OOM on a cheap phone), then an exact scale hits `PROFILE_PHOTO_MAX_PX`.
+
+`registerForActivityResult` must be called before the Activity finishes being created,
+so the launcher cannot live in `AndroidPlatformServices` — `MainActivity` implements
+`ProfilePhotoPicker` and the services class reaches it through the current-activity
+lambda, the same indirection phone verification uses. `PickVisualMedia` needs **no**
+storage permission; asking for `READ_MEDIA_IMAGES` to set an avatar would be asking to
+read the whole gallery.
+
+`Avatar` decodes inside `remember(photo)`. That key is load-bearing too: a roster
+redraws on every incoming safety response during an event, and decoding thirty JPEGs per
+frame would stutter the one screen that must not stutter. A corrupt string falls back to
+initials rather than throwing.
+
+iOS reports `photoPickerSupported = false` and hides the control — `PHPickerViewController`
+needs a `UIViewController` to present from, which `IosPlatformServices` does not hold.
 
 ## Emergency contacts
 
@@ -449,6 +497,7 @@ contacts. Do not tighten it.
 users/{userId}
   name, email, phone, role ("student"|"teacher"|"parent")
   classId, schoolId
+  photo              # base64 JPEG profile picture, ~20 KB, or ""
   shortCode          # students only — the parent linking code
   linkedStudentIds[] # parents only
 

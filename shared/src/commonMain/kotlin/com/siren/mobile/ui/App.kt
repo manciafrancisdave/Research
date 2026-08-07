@@ -406,11 +406,14 @@ private fun AppContent() {
                     Dest.Profile -> EditProfileScreen(
                         user = profile,
                         working = working,
+                        photoPickerSupported = Platform.services.photoPickerSupported,
                         onSave = { name, classId, phone ->
                             scope.launch {
                                 if (repo.updateProfile(name, classId, phone)) pop()
                             }
                         },
+                        onChangePhoto = { scope.launch { repo.changeProfilePhoto() } },
+                        onRemovePhoto = { scope.launch { repo.changeProfilePhoto(remove = true) } },
                         onBack = { pop() },
                     )
 

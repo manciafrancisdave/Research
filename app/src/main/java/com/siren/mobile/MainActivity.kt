@@ -9,13 +9,23 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.lifecycleScope
 import com.siren.mobile.data.SirenRepository
 import com.siren.mobile.platform.AndroidPlatformServices
+import com.siren.mobile.platform.ProfilePhotoEncoder
+import com.siren.mobile.platform.ProfilePhotoPicker
 import com.siren.mobile.ui.App
+import kotlin.coroutines.resume
+import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), ProfilePhotoPicker {
 
     companion object {
         const val EXTRA_ALERT_ID = AndroidPlatformServices.EXTRA_ALERT_ID
@@ -23,6 +33,47 @@ class MainActivity : ComponentActivity() {
 
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    /** Non-null only while the photo picker is open. */
+    private var pendingPhoto: CancellableContinuation<String?>? = null
+
+    /**
+     * The system photo picker.
+     *
+     * `PickVisualMedia` needs no storage permission at all — the user chooses one image
+     * and the app receives only that. Asking for READ_MEDIA_IMAGES to set an avatar
+     * would be asking to read the entire gallery.
+     */
+    private val pickPhoto =
+        registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            val waiting = pendingPhoto
+            pendingPhoto = null
+            if (waiting == null || !waiting.isActive) return@registerForActivityResult
+            // Decoding and downscaling happen off the main thread: the encoder reads and
+            // re-compresses a photo that can be several megapixels.
+            lifecycleScope.launch {
+                val encoded = uri?.let {
+                    withContext(Dispatchers.IO) { ProfilePhotoEncoder.encode(this@MainActivity, it) }
+                }
+                if (waiting.isActive) waiting.resume(encoded)
+            }
+        }
+
+    override suspend fun pickProfilePhoto(): String? = suspendCancellableCoroutine { cont ->
+        // Only one picker at a time; a second request cancels the first rather than
+        // leaving a continuation that nothing will ever resume.
+        pendingPhoto?.takeIf { it.isActive }?.resume(null)
+        pendingPhoto = cont
+        cont.invokeOnCancellation { pendingPhoto = null }
+        runCatching {
+            pickPhoto.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        }.onFailure {
+            pendingPhoto = null
+            if (cont.isActive) cont.resume(null)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()

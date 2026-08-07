@@ -6,6 +6,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,8 +56,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.decodeToImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -407,12 +413,25 @@ fun Avatar(
     initials: String,
     modifier: Modifier = Modifier,
     size: Dp = 42.dp,
+    photo: String = "",
 ) {
+    val bitmap = rememberPhotoBitmap(photo)
     Surface(
         modifier = modifier.size(size),
         shape = RoundedCornerShape(Layout.tile),
         color = MaterialTheme.colorScheme.primaryContainer,
     ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                // Crop, not Fit: a letterboxed portrait inside a 42dp tile is mostly
+                // background, and every avatar in a roster has to read at a glance.
+                contentScale = ContentScale.Crop,
+            )
+            return@Surface
+        }
         Box(contentAlignment = Alignment.Center) {
             Text(
                 initials,
@@ -433,6 +452,23 @@ fun Avatar(
  * at a glance and the counts read as data, with colour reduced to a small dot that
  * ties each figure to its status.
  */
+/**
+ * Decodes a base64 profile picture once per distinct value.
+ *
+ * The `remember(photo)` key is load-bearing. Decoding runs on the composition thread,
+ * and a roster redraws on every incoming safety response during an event — decoding
+ * thirty JPEGs per frame would stutter the one screen that must not stutter.
+ *
+ * A corrupt or truncated string yields null and the initials show instead, which is the
+ * right failure: an avatar is never worth crashing a safety dashboard over.
+ */
+@OptIn(ExperimentalEncodingApi::class)
+@Composable
+fun rememberPhotoBitmap(photo: String): ImageBitmap? = remember(photo) {
+    if (photo.isBlank()) return@remember null
+    runCatching { Base64.decode(photo).decodeToImageBitmap() }.getOrNull()
+}
+
 @Composable
 fun RosterBreakdown(
     safe: Int,

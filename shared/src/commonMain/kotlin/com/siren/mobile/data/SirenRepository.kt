@@ -421,6 +421,7 @@ object SirenRepository {
                         schoolId = doc.schoolId,
                         shortCode = doc.shortCode,
                         linkedStudentIds = doc.linkedStudentIds,
+                        photo = doc.photo,
                     )
                     _user.value = profile
                     attachRosterMembers(profile)
@@ -531,6 +532,7 @@ object SirenRepository {
                                         name = doc.name,
                                         role = Role.STUDENT,
                                         classId = doc.classId,
+                                        photo = doc.photo,
                                     )
                                 }.getOrNull()
                             }
@@ -559,6 +561,7 @@ object SirenRepository {
                                     name = doc.name,
                                     role = Role.STUDENT,
                                     classId = doc.classId,
+                                    photo = doc.photo,
                                 )
                             }.getOrNull()
                         }
@@ -722,6 +725,7 @@ object SirenRepository {
                     klass = member.classId,
                     status = r?.status ?: ResponseStatus.NO_RESPONSE,
                     respondedAt = r?.respondedAt,
+                    photo = member.photo,
                 )
             }
             .sortedWith(
@@ -823,6 +827,33 @@ object SirenRepository {
             true
         } catch (e: Exception) {
             notifyUi("Couldn't save your profile: ${e.message}", true)
+            false
+        } finally {
+            _working.value = false
+        }
+    }
+
+    /**
+     * Opens the photo picker and saves the result, or clears the picture when [remove].
+     *
+     * The platform layer hands back an already-downscaled base64 JPEG rather than a file
+     * path or a raw image: shared code has no way to resize or re-encode, and an
+     * unresized camera photo would be several megabytes against Firestore's 1 MiB
+     * document ceiling — the write would simply be rejected.
+     *
+     * A null return means the user backed out of the picker, which is not an error and
+     * must not clear the existing picture.
+     */
+    suspend fun changeProfilePhoto(remove: Boolean = false): Boolean {
+        val uid = auth.currentUser?.uid ?: return false
+        _working.value = true
+        return try {
+            val encoded = if (remove) "" else Platform.services.pickProfilePhoto() ?: return false
+            usersCol.document(uid).update("photo" to encoded)
+            notifyUi(if (remove) "Profile picture removed." else "Profile picture updated.")
+            true
+        } catch (e: Exception) {
+            notifyUi("Couldn't update your picture: ${e.message}", true)
             false
         } finally {
             _working.value = false
@@ -1139,6 +1170,8 @@ internal data class UserDoc(
     val schoolId: String = "",
     val shortCode: String = "",
     val linkedStudentIds: List<String> = emptyList(),
+    /** Base64 JPEG profile picture; see UserProfile.photo for why it lives here. */
+    val photo: String = "",
 )
 
 /**

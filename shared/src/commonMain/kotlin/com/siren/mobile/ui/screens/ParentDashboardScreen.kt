@@ -77,6 +77,7 @@ fun ParentDashboardScreen(
                 initials = user.initials,
                 eyebrow = "Parent / Guardian",
                 name = user.name.ifBlank { "Guardian" },
+                photo = user.photo,
                 trailing = {
                     IconButton(onClick = onLinkStudent) {
                         Icon(Icons.Filled.FamilyRestroom, contentDescription = "Link a student")

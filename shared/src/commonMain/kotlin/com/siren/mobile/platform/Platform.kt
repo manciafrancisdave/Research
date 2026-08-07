@@ -120,7 +120,29 @@ interface PlatformServices {
 
     /** Whether the user has allowed notifications at all. */
     fun notificationsEnabled(): Boolean
+
+    // --------------------------------------------------------- profile photo
+
+    /** Whether this platform can open an image picker. */
+    val photoPickerSupported: Boolean
+
+    /**
+     * Opens the system photo picker and returns a **base64 JPEG, already downscaled**,
+     * or null if the user backed out.
+     *
+     * Resizing belongs on this side of the seam: shared code cannot decode or re-encode
+     * an image, and a full-size camera photo is several megabytes against Firestore's
+     * 1 MiB document limit — the write would be rejected outright. Implementations must
+     * cap the long edge at [PROFILE_PHOTO_MAX_PX] and compress before encoding.
+     */
+    suspend fun pickProfilePhoto(): String?
 }
+
+/** Long-edge cap for profile pictures. Keeps an encoded photo around 20 KB. */
+const val PROFILE_PHOTO_MAX_PX = 256
+
+/** JPEG quality used when encoding a picked profile picture. */
+const val PROFILE_PHOTO_QUALITY = 80
 
 /**
  * No-op stand-in so previews and early start-up calls cannot crash. Replaced by the
@@ -156,6 +178,8 @@ private object NoOpPlatformServices : PlatformServices {
     override fun openFullScreenIntentSettings() = Unit
     override fun openNotificationSettings() = Unit
     override fun notificationsEnabled() = true
+    override val photoPickerSupported = false
+    override suspend fun pickProfilePhoto(): String? = null
 }
 
 object Platform {

@@ -105,6 +105,7 @@ fun StudentDashboardScreen(
                 initials = user.initials,
                 eyebrow = listOfNotNull("Student", user.classId.ifBlank { null }).joinToString(" · "),
                 name = user.name.ifBlank { "Student" },
+                photo = user.photo,
                 trailing = {
                     IconButton(onClick = onOpenHistory) {
                         Icon(Icons.Filled.Notifications, contentDescription = "Alert history")

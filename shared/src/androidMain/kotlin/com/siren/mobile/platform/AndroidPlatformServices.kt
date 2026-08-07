@@ -460,4 +460,18 @@ class AndroidPlatformServices(
     override fun notificationsEnabled(): Boolean =
         runCatching { NotificationManagerCompat.from(appContext).areNotificationsEnabled() }
             .getOrDefault(true)
+
+    // --------------------------------------------------------- profile photo
+
+    override val photoPickerSupported: Boolean = true
+
+    /**
+     * Delegates to the Activity, which owns the `registerForActivityResult` launcher.
+     *
+     * Null when there is no foreground Activity — the picker is a UI action, so that
+     * only happens if the screen went away mid-tap, and reporting "cancelled" is the
+     * right reading of it.
+     */
+    override suspend fun pickProfilePhoto(): String? =
+        (currentActivity() as? ProfilePhotoPicker)?.pickProfilePhoto()
 }

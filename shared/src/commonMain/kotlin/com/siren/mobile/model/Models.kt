@@ -179,6 +179,16 @@ data class UserProfile(
     /** Short code a parent types to link this student. Students only. */
     val shortCode: String = "",
     val linkedStudentIds: List<String> = emptyList(),
+    /**
+     * Profile picture as a base64 JPEG, or blank for the initials fallback.
+     *
+     * Held on the user document rather than in Firebase Storage, which needs the Blaze
+     * plan — the same billing wall that defers phone sign-up. The picker downscales to
+     * 256px at quality 80 before encoding, so a photo lands around 20 KB against
+     * Firestore's 1 MiB document ceiling, and it arrives on the profile snapshot the app
+     * already listens to instead of needing a second fetch per face.
+     */
+    val photo: String = "",
 ) {
     /** Whichever of email/phone the account actually has, for display. */
     val contact: String get() = email.ifBlank { phone }
@@ -199,6 +209,8 @@ data class LinkedPerson(
     val status: ResponseStatus = ResponseStatus.NO_RESPONSE,
     val respondedAt: Long? = null,
     val pending: Boolean = false,
+    /** Base64 JPEG, or blank to fall back to [initials]. */
+    val photo: String = "",
 ) {
     val initials: String
         get() = name.trim().split(Regex("\\s+"))

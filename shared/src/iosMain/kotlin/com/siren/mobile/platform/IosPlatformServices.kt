@@ -258,4 +258,20 @@ class IosPlatformServices(
     }
 
     override fun notificationsEnabled(): Boolean = true
+
+    // --------------------------------------------------------- profile photo
+
+    /**
+     * Off on iOS for now. `PHPickerViewController` needs a `UIViewController` to present
+     * from, which this class does not hold — the equivalent of the Activity indirection
+     * the Android side uses. Reporting false hides the control rather than offering a
+     * button that does nothing.
+     *
+     * TODO(mac): present PHPickerViewController from MainViewController, downscale to
+     * PROFILE_PHOTO_MAX_PX with UIGraphicsImageRenderer, then
+     * UIImageJPEGRepresentation + base64EncodedStringWithOptions.
+     */
+    override val photoPickerSupported: Boolean = false
+
+    override suspend fun pickProfilePhoto(): String? = null
 }

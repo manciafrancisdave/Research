@@ -120,6 +120,7 @@ fun TeacherDashboardScreen(
                 initials = user.initials,
                 eyebrow = if (user.classId.isBlank()) "Adviser" else "Adviser · ${user.classId}",
                 name = user.name.ifBlank { "Teacher" },
+                photo = user.photo,
                 trailing = {
                     IconButton(onClick = onOpenHistory) {
                         Icon(Icons.Filled.Notifications, contentDescription = "Alert history")

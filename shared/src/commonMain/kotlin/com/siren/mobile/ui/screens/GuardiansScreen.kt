@@ -206,7 +206,7 @@ fun GuardiansScreen(
                             ListRow(
                                 title = person.name,
                                 subtitle = "Parent / Guardian",
-                                leading = { Avatar(person.initials, size = 40.dp) },
+                                leading = { Avatar(person.initials, size = 40.dp, photo = person.photo) },
                             )
                         }
                         Box(Modifier.padding(start = Space.l, bottom = Space.xs)) {

@@ -75,7 +75,7 @@ fun RosterRow(person: LinkedPerson, modifier: Modifier = Modifier) {
         modifier = modifier,
         title = person.name.ifBlank { "Student" },
         subtitle = detail,
-        leading = { Avatar(person.initials, size = 40.dp) },
+        leading = { Avatar(person.initials, size = 40.dp, photo = person.photo) },
         trailing = { StatusChip(person.status) },
     )
 }
@@ -91,6 +91,7 @@ fun DashboardHeader(
     eyebrow: String,
     name: String,
     modifier: Modifier = Modifier,
+    photo: String = "",
     trailing: @Composable (() -> Unit)? = null,
 ) {
     Row(
@@ -100,7 +101,7 @@ fun DashboardHeader(
         horizontalArrangement = Arrangement.spacedBy(Space.m),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Avatar(initials)
+        Avatar(initials, photo = photo)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space.xxs)) {
             Text(
                 eyebrow,

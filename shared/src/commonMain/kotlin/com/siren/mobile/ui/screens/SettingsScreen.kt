@@ -101,7 +101,7 @@ fun SettingsScreen(
                     user.contact.ifBlank { null },
                 ).joinToString(" · "),
                 onClick = onEditProfile,
-                leading = { Avatar(user.initials) },
+                leading = { Avatar(user.initials, photo = user.photo) },
                 trailing = {
                     Icon(
                         Icons.Filled.ChevronRight,

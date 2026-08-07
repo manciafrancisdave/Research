@@ -144,6 +144,10 @@ dependencies {
     implementation(libs.androidx.splashscreen)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
+    // MainActivity awaits the photo picker result on a continuation and downscales the
+    // image off the main thread, so coroutines are a direct dependency here, not just
+    // something inherited from :shared.
+    implementation(libs.kotlinx.coroutines.core)
     // Firebase drags in fragment 1.1.0 transitively; registerForActivityResult needs
     // >= 1.3.0 or lintVitalRelease fails (InvalidFragmentVersionForActivityResult).
     implementation(libs.androidx.fragment)

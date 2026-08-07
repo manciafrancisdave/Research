@@ -15,23 +15,46 @@ evaluation phase.
 
 | Module | Status |
 |---|---|
-| `:shared` | ✅ Compose Multiplatform library. All UI, models and the data layer. Compiles for Android **and** iOS. |
-| `:app` | ✅ Thin Android host (3 files). Debug + signed release APKs build. |
+| `:shared` | ✅ Compose Multiplatform library. All UI, models and the data layer. `compileCommonMainKotlinMetadata` and `compileAndroidMain` both pass. |
+| `:app` | ⚠️ Thin Android host (3 files). Builds only where `app/google-services.json` has been restored — see **Secrets**. |
 | `iosApp/` | ⚠️ Swift sources + Podfile written, **never compiled**. Needs a Mac — see below. |
 
 ```powershell
-$env:JAVA_HOME="C:\siren_toolchain\jdk-17.0.20+8"
-$env:ANDROID_HOME="C:\Users\Administrator\AppData\Local\Android\Sdk"
+$env:JAVA_HOME="C:\Program Files\Eclipse Adoptium\jdk-17.0.20.8-hotspot"
+$env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
 $env:Path="$env:JAVA_HOME\bin;$env:Path"
 cd C:\Users\Administrator\Desktop\Project
 
 .\gradlew.bat :app:assembleDebug                    # Android debug APK
 .\gradlew.bat :app:assembleRelease                  # signed release APK
-.\gradlew.bat :shared:compileCommonMainKotlinMetadata   # type-checks shared code for BOTH platforms (~10s)
+.\gradlew.bat :shared:compileCommonMainKotlinMetadata   # type-checks common code for BOTH platforms
+.\gradlew.bat :shared:compileAndroidMain               # type-checks shared/src/androidMain
 ```
 
-That last command is the fastest way to verify shared code still compiles for iOS
-without a Mac. Use it constantly.
+The two `:shared` tasks are the fastest way to verify shared code without a Mac —
+and, more usefully, **without `google-services.json`**. Only `:app` applies the
+Google Services plugin, so the whole shared module (which is all the UI, the data
+layer and both platform implementations) compiles on a clone that has no Firebase
+credentials at all. `:app` cannot: `processDebugGoogleServices` runs ahead of every
+compile task, so even `:app:compileDebugKotlin` fails with "File google-services.json
+is missing" before a single line is compiled.
+
+### Setting up the SDK from scratch — two traps
+
+Both cost a cycle:
+
+- **The command-line tools at the well-known `commandlinetools-win-*_latest.zip` URL
+  are revision 12.0 and cannot resolve API 37 packages at all.** `sdkmanager --list`
+  happily shows them; `sdkmanager "platforms;android-37.0"` fails with a bare
+  "Failed to find package". Bootstrap first with
+  `sdkmanager "cmdline-tools;latest"`, which lands revision 22.0 in
+  `cmdline-tools/latest-2`, then use *that* binary for everything else.
+- **API 37 has minor versions.** The package is `platforms;android-37.0` — plain
+  `platforms;android-37` does not exist. `37.1` and `37.2-beta` are also published.
+  `build-tools;37.0.0` keeps the old three-part form.
+
+Gradle will also pull `build-tools;36.0.0` in on its own; that is expected, not a
+misconfiguration.
 
 ---
 
@@ -133,6 +156,10 @@ Each of these cost a debugging cycle:
   The alarm service uses its own **silent** channel (`siren_alarm_playback`) precisely
   so the notification does not play a second sound over MediaPlayer.
 - **Android Studio's bundled JBR 25 is too new.** Always build with JDK 17.
+- **GitLive's `DocumentReference.update(vararg Pair)` is deprecated** in favour of
+  `updateFields`. Every call site still compiles and warns; migrate them together
+  rather than piecemeal, so the diff is one reviewable change rather than noise
+  spread across the repository.
 
 ---
 

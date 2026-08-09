@@ -14,12 +14,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -39,13 +40,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.siren.mobile.model.AlertRecord
 import com.siren.mobile.model.LinkedPerson
 import com.siren.mobile.model.ResponseStatus
 import com.siren.mobile.model.UserProfile
 import com.siren.mobile.ui.components.BannerTone
+import com.siren.mobile.ui.components.ButtonTone
 import com.siren.mobile.ui.components.EmptyState
 import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.ListGroup
@@ -53,10 +54,10 @@ import com.siren.mobile.ui.components.ListRow
 import com.siren.mobile.ui.components.OfflineBanner
 import com.siren.mobile.ui.components.Pill
 import com.siren.mobile.ui.components.PrimaryButton
+import com.siren.mobile.ui.components.RosterBreakdown
 import com.siren.mobile.ui.components.RowDivider
 import com.siren.mobile.ui.components.SectionHeader
 import com.siren.mobile.ui.components.SirenField
-import com.siren.mobile.ui.components.RosterBreakdown
 import com.siren.mobile.ui.components.SkeletonList
 import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.SirenTheme
@@ -70,7 +71,15 @@ private enum class RosterFilter(val label: String) {
     NO_REPLY("No reply"),
 }
 
-/** Prototype screen 06 — the adviser's live class overview. */
+/**
+ * Prototype screen 06 — the adviser's live class overview, the Overview tab.
+ *
+ * Deliberately holds no roster list, no search and no add-student field: those are the
+ * Roster tab ([TeacherRosterScreen]). Both tabs used to render this one composable, so
+ * "Overview" and "Roster" were the same page and the bottom bar had two buttons that
+ * did nothing to tell apart. This screen answers "is my class all right?" at a glance;
+ * the other answers "who is in it?".
+ */
 @Composable
 fun TeacherDashboardScreen(
     user: UserProfile,
@@ -78,33 +87,16 @@ fun TeacherDashboardScreen(
     activeAlert: AlertRecord?,
     online: Boolean,
     loading: Boolean,
-    working: Boolean,
     onOpenLive: () -> Unit,
+    onOpenRoster: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenGuide: () -> Unit,
-    onAddStudent: (code: String) -> Unit,
-    onRemoveStudent: (uid: String) -> Unit,
     onEditProfile: () -> Unit,
 ) {
-    var query by remember { mutableStateOf("") }
-    var filter by remember { mutableStateOf(RosterFilter.ALL) }
-    var addingCode by remember { mutableStateOf("") }
-    var removing by remember { mutableStateOf<LinkedPerson?>(null) }
-
     val status = SirenTheme.status
     val safe = roster.count { it.status == ResponseStatus.SAFE }
     val help = roster.count { it.status == ResponseStatus.NEEDS_HELP }
     val noReply = roster.count { it.status == ResponseStatus.NO_RESPONSE }
-
-    val visible = roster
-        .filter {
-            when (filter) {
-                RosterFilter.ALL -> true
-                RosterFilter.NEEDS_HELP -> it.status == ResponseStatus.NEEDS_HELP
-                RosterFilter.NO_REPLY -> it.status == ResponseStatus.NO_RESPONSE
-            }
-        }
-        .filter { it.name.contains(query, ignoreCase = true) }
 
     LazyColumn(
         Modifier.fillMaxWidth(),
@@ -164,10 +156,10 @@ fun TeacherDashboardScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = status.onHeroMuted,
                     )
-                    com.siren.mobile.ui.components.PrimaryButton(
+                    PrimaryButton(
                         text = "Open roll call",
                         onClick = onOpenLive,
-                        tone = com.siren.mobile.ui.components.ButtonTone.OnColor,
+                        tone = ButtonTone.OnColor,
                         onColorContent = status.hero,
                     )
                 }
@@ -175,12 +167,15 @@ fun TeacherDashboardScreen(
         }
 
         // Only meaningful once there is a class to describe.
-        if (roster.isNotEmpty()) {
-            item { RosterBreakdown(safe = safe, needsHelp = help, noReply = noReply) }
+        when {
+            roster.isNotEmpty() ->
+                item { RosterBreakdown(safe = safe, needsHelp = help, noReply = noReply) }
+
+            loading -> item { SkeletonList(rows = 3) }
         }
 
         // The roster is keyed entirely on classId, so an adviser with no class set can
-        // never have a student. This is the first thing to fix, ahead of the code field.
+        // never have a student. This is the first thing to fix, ahead of adding anyone.
         if (user.classId.isBlank()) {
             item {
                 InfoBanner(
@@ -193,6 +188,150 @@ fun TeacherDashboardScreen(
                 PrimaryButton(
                     text = "Set your class",
                     onClick = onEditProfile,
+                    icon = Icons.Filled.School,
+                )
+            }
+        } else if (roster.isEmpty() && !loading) {
+            item {
+                EmptyState(
+                    title = "No students yet",
+                    subtitle = "Open the Roster tab to add students with the 6-character code from their Settings.",
+                    icon = Icons.Filled.Groups,
+                )
+            }
+        }
+
+        item {
+            ListGroup {
+                ListRow(
+                    title = "Class roster",
+                    subtitle = when {
+                        user.classId.isBlank() -> "No class set yet"
+                        roster.size == 1 -> "1 student in ${user.classId}"
+                        else -> "${roster.size} students in ${user.classId}"
+                    },
+                    onClick = onOpenRoster,
+                    leading = {
+                        Icon(
+                            Icons.Filled.Groups,
+                            contentDescription = null,
+                            Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                )
+                RowDivider()
+                ListRow(
+                    title = "Alert history",
+                    subtitle = "Past events and who responded",
+                    onClick = onOpenHistory,
+                    leading = {
+                        Icon(
+                            Icons.Filled.History,
+                            contentDescription = null,
+                            Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                )
+                RowDivider()
+                ListRow(
+                    title = "Safety guide",
+                    subtitle = "Drop, cover, hold and 27 more",
+                    onClick = onOpenGuide,
+                    leading = {
+                        Icon(
+                            Icons.Filled.MenuBook,
+                            contentDescription = null,
+                            Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The Roster tab — class membership, and the only place students are added or removed.
+ *
+ * Split out of [TeacherDashboardScreen] so the two teacher tabs are actually different
+ * screens. Everything here is class management; nothing here is a live-event readout.
+ */
+@Composable
+fun TeacherRosterScreen(
+    user: UserProfile,
+    roster: List<LinkedPerson>,
+    online: Boolean,
+    loading: Boolean,
+    working: Boolean,
+    onAddStudent: (code: String) -> Unit,
+    onRemoveStudent: (uid: String) -> Unit,
+    onEditProfile: () -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    var filter by remember { mutableStateOf(RosterFilter.ALL) }
+    var addingCode by remember { mutableStateOf("") }
+    var removing by remember { mutableStateOf<LinkedPerson?>(null) }
+
+    val visible = roster
+        .filter {
+            when (filter) {
+                RosterFilter.ALL -> true
+                RosterFilter.NEEDS_HELP -> it.status == ResponseStatus.NEEDS_HELP
+                RosterFilter.NO_REPLY -> it.status == ResponseStatus.NO_RESPONSE
+            }
+        }
+        .filter { it.name.contains(query, ignoreCase = true) }
+
+    LazyColumn(
+        Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(
+            start = Layout.screenPadding,
+            end = Layout.screenPadding,
+            bottom = Space.xxxl,
+        ),
+        verticalArrangement = Arrangement.spacedBy(Space.m),
+    ) {
+        item {
+            ScreenHeader(
+                title = "Class roster",
+                trailing = {
+                    if (user.classId.isNotBlank()) {
+                        Pill(
+                            user.classId,
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                            MaterialTheme.colorScheme.surfaceVariant,
+                        )
+                    }
+                },
+            )
+        }
+
+        if (!online) item { OfflineBanner() }
+
+        if (user.classId.isBlank()) {
+            // Without a class there is nothing to add a student to, so the whole
+            // management surface below would be inert. Show the one useful action.
+            item {
+                InfoBanner(
+                    "Set the class you advise before adding students — the roll call is grouped by class.",
+                    Icons.Filled.Warning,
+                    tone = BannerTone.Warn,
+                )
+            }
+            item {
+                PrimaryButton(
+                    text = "Set your class",
+                    onClick = onEditProfile,
+                    icon = Icons.Filled.School,
+                )
+            }
+            item {
+                EmptyState(
+                    title = "No class set",
+                    subtitle = "Once you have set the class you advise, add students with the 6-character code from their Settings.",
                     icon = Icons.Filled.School,
                 )
             }
@@ -221,90 +360,77 @@ fun TeacherDashboardScreen(
                     icon = Icons.Filled.PersonAdd,
                 )
             }
-        }
 
-        item {
-            SirenField(
-                value = query,
-                onValueChange = { query = it },
-                label = "Search students",
-                leadingIcon = Icons.Filled.Search,
-            )
-        }
-
-        item {
-            // Scrolls rather than wraps — with counts appended these used to break
-            // onto three lines inside a single chip. The counts now live in the
-            // status block above, so they are not duplicated here either.
-            Row(
-                Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(Space.s),
-            ) {
-                RosterFilter.entries.forEach { f ->
-                    FilterChip(
-                        selected = filter == f,
-                        onClick = { filter = f },
-                        label = { Text(f.label) },
-                        shape = RoundedCornerShape(Layout.pill),
-                        colors = FilterChipDefaults.filterChipColors(),
+            // Searching and filtering an empty class is noise, not a feature.
+            if (roster.isNotEmpty()) {
+                item {
+                    SirenField(
+                        value = query,
+                        onValueChange = { query = it },
+                        label = "Search students",
+                        leadingIcon = Icons.Filled.Search,
                     )
                 }
-            }
-        }
 
-        item { SectionHeader(title = "Class roster") }
-
-        when {
-            loading -> item { SkeletonList(rows = 5) }
-
-            roster.isEmpty() -> item {
-                EmptyState(
-                    title = "No students yet",
-                    subtitle = if (user.classId.isBlank()) {
-                        "Set the class you advise, then add students with the 6-character code from their Settings."
-                    } else {
-                        "Add students with the 6-character code shown in their Settings."
-                    },
-                    icon = Icons.Filled.Groups,
-                )
-            }
-
-            visible.isEmpty() -> item {
-                EmptyState(
-                    title = "Nobody matches",
-                    subtitle = "Try a different filter or clear the search.",
-                    icon = Icons.Filled.Search,
-                )
-            }
-
-            else -> item {
-                ListGroup {
-                    visible.forEachIndexed { i, person ->
-                        RosterRow(person)
-                        Box(Modifier.padding(start = Space.l, bottom = Space.xs)) {
-                            TextButton(onClick = { removing = person }) { Text("Remove from class") }
+                item {
+                    // Scrolls rather than wraps — with counts appended these used to
+                    // break onto three lines inside a single chip. The counts live on
+                    // the Overview tab, so they are not duplicated here either.
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(Space.s),
+                    ) {
+                        RosterFilter.entries.forEach { f ->
+                            FilterChip(
+                                selected = filter == f,
+                                onClick = { filter = f },
+                                label = { Text(f.label) },
+                                shape = RoundedCornerShape(Layout.pill),
+                                colors = FilterChipDefaults.filterChipColors(),
+                            )
                         }
-                        if (i < visible.lastIndex) RowDivider()
                     }
                 }
             }
-        }
 
-        item {
-            ListGroup {
-                ListRow(
-                    title = "Safety guide",
-                    subtitle = "Drop, cover, hold and 27 more",
-                    onClick = onOpenGuide,
-                    leading = {
-                        Icon(
-                            Icons.Filled.MenuBook,
-                            contentDescription = null,
-                            Modifier.size(24.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
+            item {
+                SectionHeader(
+                    title = if (roster.isEmpty()) "Students" else "Students (${roster.size})",
                 )
+            }
+
+            when {
+                loading -> item { SkeletonList(rows = 5) }
+
+                roster.isEmpty() -> item {
+                    EmptyState(
+                        title = "No students yet",
+                        subtitle = "Add students with the 6-character code shown in their Settings.",
+                        icon = Icons.Filled.Groups,
+                    )
+                }
+
+                visible.isEmpty() -> item {
+                    EmptyState(
+                        title = "Nobody matches",
+                        subtitle = "Try a different filter or clear the search.",
+                        icon = Icons.Filled.Search,
+                    )
+                }
+
+                else -> item {
+                    ListGroup {
+                        visible.forEachIndexed { i, person ->
+                            RosterRow(person)
+                            Box(Modifier.padding(start = Space.l, bottom = Space.xs)) {
+                                TextButton(onClick = { removing = person }) {
+                                    Text("Remove from class")
+                                }
+                            }
+                            if (i < visible.lastIndex) RowDivider()
+                        }
+                    }
+                }
             }
         }
     }

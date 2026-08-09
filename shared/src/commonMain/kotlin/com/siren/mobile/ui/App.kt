@@ -67,6 +67,7 @@ import com.siren.mobile.ui.screens.SignUpScreen
 import com.siren.mobile.ui.screens.SplashScreen
 import com.siren.mobile.ui.screens.StudentDashboardScreen
 import com.siren.mobile.ui.screens.TeacherDashboardScreen
+import com.siren.mobile.ui.screens.TeacherRosterScreen
 import com.siren.mobile.ui.theme.SirenTheme
 import kotlinx.coroutines.launch
 
@@ -332,12 +333,10 @@ private fun AppContent() {
                             activeAlert = alerts.firstOrNull(),
                             online = online,
                             loading = !alertsLoaded,
-                            working = working,
                             onOpenLive = { alerts.firstOrNull()?.let { push(Dest.Live(it.id)) } },
+                            onOpenRoster = { selectTab(Dest.People) },
                             onOpenHistory = { selectTab(Dest.History) },
                             onOpenGuide = { push(Dest.Guide) },
-                            onAddStudent = { code -> addStudentToClass(code) },
-                            onRemoveStudent = { repo.removeStudentFromClass(it) },
                             onEditProfile = { push(Dest.Profile) },
                         )
 
@@ -354,16 +353,12 @@ private fun AppContent() {
                     }
 
                     Dest.People -> when (profile.role) {
-                        Role.TEACHER -> TeacherDashboardScreen(
+                        Role.TEACHER -> TeacherRosterScreen(
                             user = profile,
                             roster = roster,
-                            activeAlert = alerts.firstOrNull(),
                             online = online,
                             loading = !alertsLoaded,
                             working = working,
-                            onOpenLive = { alerts.firstOrNull()?.let { push(Dest.Live(it.id)) } },
-                            onOpenHistory = { selectTab(Dest.History) },
-                            onOpenGuide = { push(Dest.Guide) },
                             onAddStudent = { code -> addStudentToClass(code) },
                             onRemoveStudent = { repo.removeStudentFromClass(it) },
                             onEditProfile = { push(Dest.Profile) },

@@ -16,15 +16,25 @@ named `SIREN-v<version>-debug.apk`.
 
 | File | Version | Size | Built |
 |---|---|---|---|
+| `SIREN-v2.7.1-debug.apk` | 2.7.1 (versionCode 6) | 25.7 MB | 9 Aug 2026 |
 | `SIREN-v2.7.0-debug.apk` | 2.7.0 (versionCode 5) | 25.7 MB | 8 Aug 2026 |
 
-Verified against the built artifact, not assumed:
+**v2.7.1** splits the two dashboards whose tabs landed on the same page: the
+adviser's Overview and Roster, and the guardian's Home and Children. Install it
+over v2.7.0 — versionCode went up, so it upgrades rather than needing a manual
+uninstall.
 
+Verified against the v2.7.1 artifact, not assumed:
+
+- **Version** — `aapt2 dump badging` reports `versionCode='6' versionName='2.7.1'`
+  for `com.research.siren`
 - **Alarm audio** — `res/raw/siren_alarm.mp3` present at **139,695 bytes**
 - **Compose resources** — 28 `ic_sg_*` pictograms and 5 Inter weights under
   `assets/composeResources/com.siren.mobile.resources/`, which AGP 9's
   KMP-library plugin does not package on its own
 - 15 `classes*.dex` — R8 is off, as expected for debug
+- `:shared:compileCommonMainKotlinMetadata` passes, so the shared code
+  type-checks for **both** Android and iOS
 
 **Not run.** No device or emulator was available. These are static checks: they
 prove it compiled, packaged and carries its resources. They do not prove it

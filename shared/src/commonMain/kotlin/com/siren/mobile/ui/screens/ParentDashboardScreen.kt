@@ -17,7 +17,6 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
@@ -29,6 +28,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.siren.mobile.model.LinkedPerson
 import com.siren.mobile.model.ResponseStatus
@@ -39,6 +40,7 @@ import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.ListGroup
 import com.siren.mobile.ui.components.ListRow
 import com.siren.mobile.ui.components.OfflineBanner
+import com.siren.mobile.ui.components.PrimaryButton
 import com.siren.mobile.ui.components.RowDivider
 import com.siren.mobile.ui.components.SectionHeader
 import com.siren.mobile.ui.components.SkeletonList
@@ -46,7 +48,14 @@ import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.SirenTheme
 import com.siren.mobile.ui.theme.Space
 
-/** Prototype screen 07. */
+/**
+ * Prototype screen 07 — the guardian's Home tab.
+ *
+ * Holds the single at-a-glance verdict and the things a parent reaches for during an
+ * event; the list of linked children is the Children tab ([ParentChildrenScreen]).
+ * Both tabs used to render this one composable, so Home and Children were the same
+ * page.
+ */
 @Composable
 fun ParentDashboardScreen(
     user: UserProfile,
@@ -55,6 +64,7 @@ fun ParentDashboardScreen(
     online: Boolean,
     loading: Boolean,
     schoolHotline: String = "(082) 227-4410",
+    onOpenChildren: () -> Unit,
     onLinkStudent: () -> Unit,
     onOpenGuide: () -> Unit,
     onCall: (String) -> Unit,
@@ -131,19 +141,19 @@ fun ParentDashboardScreen(
                     if (needsHelp > 0) Icons.Filled.Warning else Icons.Filled.VerifiedUser,
                     contentDescription = null,
                     Modifier.size(36.dp),
-                    tint = if (needsHelp > 0) androidx.compose.ui.graphics.Color.White else status.safeFill,
+                    tint = if (needsHelp > 0) Color.White else status.safeFill,
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(Space.xxs)) {
                     Text(
                         headline,
                         style = MaterialTheme.typography.titleLarge,
-                        color = if (needsHelp > 0) androidx.compose.ui.graphics.Color.White else status.onHero,
+                        color = if (needsHelp > 0) Color.White else status.onHero,
                     )
                     Text(
                         detail,
                         style = MaterialTheme.typography.bodySmall,
                         color = if (needsHelp > 0) {
-                            androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f)
+                            Color.White.copy(alpha = 0.85f)
                         } else {
                             status.onHeroMuted
                         },
@@ -153,36 +163,19 @@ fun ParentDashboardScreen(
         }
 
         item {
-            SectionHeader(
-                title = "Linked children",
-                actionLabel = "Link",
-                onAction = onLinkStudent,
-            )
-        }
-
-        when {
-            loading -> item { SkeletonList(rows = 2) }
-
-            children.isEmpty() -> item {
-                EmptyState(
-                    title = "No children linked",
-                    subtitle = "Ask your child for the 6-character code in their Settings, then tap Link.",
-                    icon = Icons.Filled.FamilyRestroom,
-                )
-            }
-
-            else -> item {
-                ListGroup {
-                    children.forEachIndexed { i, child ->
-                        RosterRow(child)
-                        if (i < children.lastIndex) RowDivider()
-                    }
-                }
-            }
-        }
-
-        item {
             ListGroup {
+                TileRow(
+                    icon = Icons.Filled.FamilyRestroom,
+                    title = "Children",
+                    subtitle = when {
+                        loading && children.isEmpty() -> "Loading…"
+                        children.isEmpty() -> "Nobody linked yet · tap to link"
+                        children.size == 1 -> "1 child linked"
+                        else -> "${children.size} children linked"
+                    },
+                    onClick = onOpenChildren,
+                )
+                RowDivider()
                 TileRow(
                     icon = Icons.Filled.Call,
                     title = "School emergency line",
@@ -203,9 +196,104 @@ fun ParentDashboardScreen(
     }
 }
 
+/**
+ * The Children tab — every linked student and where each one stands.
+ *
+ * Split out of [ParentDashboardScreen] so the guardian's two tabs are actually
+ * different screens. Home carries the one-line verdict; this carries the roll.
+ */
+@Composable
+fun ParentChildrenScreen(
+    children: List<LinkedPerson>,
+    pendingRequests: Int,
+    online: Boolean,
+    loading: Boolean,
+    onLinkStudent: () -> Unit,
+) {
+    val needsHelp = children.count { it.status == ResponseStatus.NEEDS_HELP }
+
+    LazyColumn(
+        Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(
+            start = Layout.screenPadding,
+            end = Layout.screenPadding,
+            bottom = Space.xxxl,
+        ),
+        verticalArrangement = Arrangement.spacedBy(Space.m),
+    ) {
+        item { ScreenHeader(title = "Children") }
+
+        if (!online) item { OfflineBanner() }
+
+        if (pendingRequests > 0) {
+            item {
+                InfoBanner(
+                    text = if (pendingRequests == 1) {
+                        "Waiting for a student to confirm you are their parent or guardian."
+                    } else {
+                        "$pendingRequests link requests are waiting for the students to confirm."
+                    },
+                    icon = Icons.Filled.HourglassTop,
+                    tone = BannerTone.Warn,
+                )
+            }
+        }
+
+        // Anyone asking for help outranks the list itself, in case it runs past a screen.
+        if (needsHelp > 0) {
+            item {
+                InfoBanner(
+                    text = if (needsHelp == 1) {
+                        "1 child has asked for help. Contact the school immediately."
+                    } else {
+                        "$needsHelp children have asked for help. Contact the school immediately."
+                    },
+                    icon = Icons.Filled.Warning,
+                    tone = BannerTone.Danger,
+                )
+            }
+        }
+
+        item {
+            PrimaryButton(
+                text = "Link a student",
+                onClick = onLinkStudent,
+                icon = Icons.Filled.FamilyRestroom,
+            )
+        }
+
+        item {
+            SectionHeader(
+                title = if (children.isEmpty()) "Linked children" else "Linked children (${children.size})",
+            )
+        }
+
+        when {
+            loading -> item { SkeletonList(rows = 2) }
+
+            children.isEmpty() -> item {
+                EmptyState(
+                    title = "No children linked",
+                    subtitle = "Ask your child for the 6-character code in their Settings, then tap Link a student. They have to confirm the request on their own phone before you can follow them.",
+                    icon = Icons.Filled.FamilyRestroom,
+                )
+            }
+
+            else -> item {
+                ListGroup {
+                    children.forEachIndexed { i, child ->
+                        RosterRow(child)
+                        if (i < children.lastIndex) RowDivider()
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun TileRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     title: String,
     subtitle: String,
     onClick: () -> Unit,

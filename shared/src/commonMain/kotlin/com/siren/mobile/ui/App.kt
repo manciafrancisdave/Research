@@ -57,6 +57,7 @@ import com.siren.mobile.ui.screens.GuardiansScreen
 import com.siren.mobile.ui.screens.HistoryScreen
 import com.siren.mobile.ui.screens.LiveSafetyDashboardScreen
 import com.siren.mobile.ui.screens.LoginScreen
+import com.siren.mobile.ui.screens.ParentChildrenScreen
 import com.siren.mobile.ui.screens.ParentDashboardScreen
 import com.siren.mobile.ui.screens.ParentLinkingScreen
 import com.siren.mobile.ui.screens.RoleSelectionScreen
@@ -346,6 +347,7 @@ private fun AppContent() {
                             pendingRequests = pendingLinkRequests,
                             online = online,
                             loading = !alertsLoaded,
+                            onOpenChildren = { selectTab(Dest.People) },
                             onLinkStudent = { push(Dest.Link) },
                             onOpenGuide = { push(Dest.Guide) },
                             onCall = { Platform.services.dial(it) },
@@ -364,15 +366,13 @@ private fun AppContent() {
                             onEditProfile = { push(Dest.Profile) },
                         )
 
-                        else -> ParentDashboardScreen(
-                            user = profile,
+                        // Students have no People tab, so this is the parent's Children.
+                        else -> ParentChildrenScreen(
                             children = roster,
                             pendingRequests = pendingLinkRequests,
                             online = online,
                             loading = !alertsLoaded,
                             onLinkStudent = { push(Dest.Link) },
-                            onOpenGuide = { push(Dest.Guide) },
-                            onCall = { Platform.services.dial(it) },
                         )
                     }
 

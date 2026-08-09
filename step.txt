@@ -1,5 +1,5 @@
 ===============================================================================
- S.I.R.E.N. MOBILE - SETUP GUIDE  (rebuild, v2.4.0)
+ S.I.R.E.N. MOBILE - SETUP GUIDE  (v2.7.0, versionCode 5)
  Seismic Integrated Response and Emergency Notification
  City of Bogo Senior High School - Practical Research 2
 ===============================================================================
@@ -7,49 +7,85 @@
  Project folder : C:\Users\Administrator\Desktop\Project
  Firebase proj  : quicktrip-fe547
  App package    : com.research.siren   (code namespace: com.siren.mobile)
- Old built APKs : C:\Users\Administrator\Desktop\SIREN-APK\
+ Built APKs     : dist\ in this repository (see section 3.5)
+
+ This guide is the practical how-to. CLAUDE.md is the engineering reference -
+ architecture, build traps and the reasoning behind each decision. Where the
+ two ever disagree, the code wins: intensity bands live in Intensity
+ .fromMagnitude in shared\...\model\Models.kt.
 
 -------------------------------------------------------------------------------
- WHAT CHANGED FROM THE OLD GUIDE  -- READ THIS FIRST
+ WHAT CHANGED SINCE v2.4.0  -- READ THIS FIRST
 -------------------------------------------------------------------------------
 
- The original project folder was lost. This project was rebuilt from the
- decompiled APK plus the Kotlin/Compose prototype. Three things are different:
+ If you followed the old copy of this guide, five things are now different and
+ four of them will bite you.
 
- 1. SIGN-IN IS NOW EMAIL/PASSWORD, NOT ANONYMOUS.
-    The old guide told you to enable "Anonymous" in Firebase. That is no longer
-    used. Enable Email/Password instead (section 2.1). Anonymous accounts were
-    lost whenever a phone reinstalled the app, which broke parent-student links
-    and the alert history.
+ 1. THE INTENSITY THRESHOLDS IN THE OLD GUIDE WERE WRONG.
+    It said green <= 0.30 g / red >= 0.61 g. The app has never used those
+    numbers. The real bands are green < 0.010 g, yellow 0.010-0.120 g, red
+    >= 0.120 g (section 6). If the ESP32 sketch was set from the old figures,
+    FIX THE FIRMWARE - at 0.61 g the hardware would stay silent through an
+    earthquake the phone would call Red.
 
- 2. THE RELEASE SIGNING KEY IS NEW.
-    siren-release.jks could not be recovered. A new key was generated. Any phone
-    still holding the old SIREN-v1.0-release.apk MUST UNINSTALL IT FIRST -
-    Android will not update an app whose signing key changed.
+ 2. TEST PUSHES FROM THE FIREBASE CONSOLE DO NOT SOUND THE ALARM.
+    The console composer sends a "notification" payload, which the system tray
+    draws without ever waking the app. Real alerts must be data-only and
+    high-priority. See section 2.4 - this is the single most misleading part
+    of the old guide.
 
- 3. VERSION IS NOW 2.4.0 (versionCode 2), matching the prototype.
+ 3. PHONE SIGN-UP EXISTS NOW (Android only), alongside email/password.
+    It needs three things enabled in the console before it can send one SMS.
+    See section 2.6.
+
+ 4. THE TEACHER ROSTER IS SET UP INSIDE THE APP.
+    The old guide told you to type classId into the Firestore console by hand.
+    Advisers now set their class in Settings -> Edit profile and add students
+    by linking code.
+
+ 5. PARENT LINKING NOW NEEDS THE STUDENT'S APPROVAL.
+    Typing a student's code raises a request. It is not a link until the
+    student accepts it on their own phone.
+
+ Still true from the v2.4.0 rebuild: sign-in is email/password (not anonymous),
+ and the release signing key is a NEW one, so any phone still holding the old
+ SIREN-v1.0-release.apk must uninstall it before installing.
 
 -------------------------------------------------------------------------------
- SECTION 1 - WHAT IS ALREADY SET UP ON THIS COMPUTER
+ SECTION 1 - WHAT THE BUILD MACHINE NEEDS
 -------------------------------------------------------------------------------
 
- [x] Android Studio             C:\Program Files\Android\Android Studio
- [x] Android SDK (platform 37)  C:\Users\Administrator\AppData\Local\Android\Sdk
- [x] Portable JDK 17            C:\siren_toolchain\jdk-17.0.20+8
- [x] Gradle 9.6.1 wrapper       in the project folder (gradlew.bat)
- [x] google-services.json       app\google-services.json
- [x] Release keystore           siren-release.jks + keystore.properties
+ [ ] JDK 17                     C:\Program Files\Eclipse Adoptium\jdk-17.0.20.8-hotspot
+                                (older setups used C:\siren_toolchain\jdk-17.0.20+8)
+ [ ] Android SDK, platform 37   %LOCALAPPDATA%\Android\Sdk
+ [ ] Gradle 9.6.1 wrapper       in the project folder (gradlew.bat) - included
+ [ ] google-services.json       app\google-services.json     ** NOT in the repo **
+ [ ] Release keystore           siren-release.jks + keystore.properties
+                                                              ** NOT in the repo **
  [x] App source code            shared\src\commonMain\kotlin\com\siren\mobile\
  [x] Android host (3 files)     app\src\main\java\com\siren\mobile\
  [x] 28 safety-guide icons      shared\src\commonMain\composeResources\drawable\
  [x] Inter font family          shared\src\commonMain\composeResources\font\
 
- NOTE: the app is now Compose Multiplatform. Almost all code lives in :shared and is
- compiled for both Android and iOS. The :app module is only the Android host.
- iOS cannot be built on this Windows PC - see iosApp\README.md.
+ Check the toolchain on any machine before you start:
 
- NOTE: Android Studio ships its own Java (JBR 25). Always build with the JDK 17
- above - see section 3.1.
+   & "$env:JAVA_HOME\bin\java.exe" -version     # must say 17
+   Test-Path "$env:LOCALAPPDATA\Android\Sdk"
+
+ The three unchecked files are deliberately excluded by .gitignore. A fresh
+ clone cannot build a release without them - restore them from your backup.
+
+ NOTE: the app is Compose Multiplatform. Almost all code lives in :shared and
+ is compiled for both Android and iOS. The :app module is only the Android
+ host. iOS cannot be built on this Windows PC - see iosApp\README.md.
+
+ NOTE: Android Studio ships its own Java (JBR 25). It is too new. Always build
+ with the JDK 17 above - see section 3.1.
+
+ NOTE: setting up the SDK from scratch has two traps that each cost an hour.
+ They are written up in CLAUDE.md under "Setting up the SDK from scratch".
+ The short version: bootstrap with sdkmanager "cmdline-tools;latest" first,
+ and the platform package is "platforms;android-37.0", not "android-37".
 
 -------------------------------------------------------------------------------
  SECTION 2 - FIREBASE CONSOLE SETUP  ** DO THIS FIRST **
@@ -95,11 +131,38 @@
 
    If you skip this you get "permission denied" and blank screens.
 
+   WARNING if you ever tighten these to "each user writes only their own
+   document": two flows deliberately write across user boundaries - a parent
+   creating a linkRequests document, and an adviser setting classId on a
+   student. Both fail SILENTLY at the write if the rules forbid them. Write
+   explicit rules for those two before locking anything down.
+
  --- 2.4  Cloud Messaging --------------------------------------------------
 
    Nothing to enable. The app subscribes to the "alerts" topic on startup.
-   Test push: Build -> Messaging -> Create campaign -> Firebase Notification
-   message -> target Topic = alerts
+
+   ** THE ALERT PUSH MUST BE DATA-ONLY AND HIGH-PRIORITY. **
+
+   Whoever sends the alert (the ESP32 path, or a Cloud Function) must send:
+
+      priority: high
+      data: { alertId: "...", intensity: "red", magnitudeG: 0.147 }
+
+   with NO "notification" block. The reason: when a push carries a
+   notification payload and the app has been killed, Android draws the tray
+   notification itself and the app never runs - so onMessageReceived is never
+   called, and NO ALARM SOUNDS. A high-priority data message is also what
+   lets the alarm's foreground service start from the background at all.
+
+   TESTING FROM THE CONSOLE: Build -> Messaging -> Create campaign, target
+   Topic = alerts. This proves the phone is subscribed and reachable, and
+   nothing more - it sends a notification payload, so it will NOT sound the
+   alarm or open the full-screen alert. Do not read that as a failure. Use
+   Demo Mode (section 4) to test alarm behaviour, and a data-only send to test
+   the real path end to end.
+
+   SirenMessagingService logs loudly when a push arrives with no alertId,
+   because that misconfiguration is otherwise invisible.
 
  --- 2.5  Create the ESP32's own account -----------------------------------
 
@@ -110,14 +173,47 @@
    3. Password: pick one and put it in the firmware
    4. Copy that email + password into the ESP32 sketch
 
+ --- 2.6  Phone sign-up  (optional, Android only) --------------------------
+
+   Email/password is the primary path and needs none of this. Phone sign-up is
+   implemented on Android and hidden entirely on iOS. It cannot send a single
+   SMS until all three of these are done, and all three fail at RUNTIME, not
+   at build time - the app builds fine and then the button just errors.
+
+   1. BLAZE PLAN - already done, this project is on Blaze. Every verification
+      SMS is billed per message, so watch the quota during a demo.
+
+   2. SHA-256 FINGERPRINTS - register BOTH, under Project settings -> your
+      Android app -> Add fingerprint:
+
+        debug   (~/.android/debug.keystore)
+        28:6D:5C:E9:FB:00:D7:8C:7F:C5:87:18:F9:B4:ED:89:
+        41:8B:6A:30:64:45:B7:D8:02:85:69:2F:09:34:79:BA
+
+        release (siren-release.jks)
+        16:EC:CC:66:64:B8:E7:4A:38:B8:75:37:5F:B1:C6:AE:
+        00:D7:73:F4:85:AF:2E:03:32:43:64:C9:10:02:BC:3E
+
+      Registering only the release one is the classic mistake: every debug
+      build then fails with "This app is not authorized", which reads like a
+      code fault but is not. RE-DOWNLOAD google-services.json after adding
+      them.
+
+   3. PHONE ENABLED under Authentication -> Sign-in method.
+
+   To read a fingerprint back off any APK:
+     apksigner verify --print-certs <apk>
+   (keytool -printcert -jarfile returns nothing on these APKs - they carry a
+   v2 signature only, not a legacy JAR one.)
+
 -------------------------------------------------------------------------------
  SECTION 3 - BUILDING THE APK
 -------------------------------------------------------------------------------
 
  --- 3.1  Set up the environment (paste all 4 lines in every new window) ---
 
-   $env:JAVA_HOME="C:\siren_toolchain\jdk-17.0.20+8"
-   $env:ANDROID_HOME="C:\Users\Administrator\AppData\Local\Android\Sdk"
+   $env:JAVA_HOME="C:\Program Files\Eclipse Adoptium\jdk-17.0.20.8-hotspot"
+   $env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
    $env:Path="$env:JAVA_HOME\bin;$env:Path"
    cd C:\Users\Administrator\Desktop\Project
 
@@ -134,12 +230,36 @@
 
    Wait for "BUILD SUCCESSFUL". The first build needs an internet connection.
 
- --- 3.3  Where the APKs land ----------------------------------------------
+ --- 3.3  Type-checking without google-services.json ------------------------
+
+   If you only want to know whether the code still compiles - on a machine
+   with no Firebase credentials, or before touching the Android host:
+
+     .\gradlew.bat :shared:compileCommonMainKotlinMetadata   # both platforms
+     .\gradlew.bat :shared:compileAndroidMain                # androidMain
+
+   These cover all the UI, the data layer and both platform implementations.
+   :app cannot do this - the Google Services plugin runs before every compile
+   task, so even :app:compileDebugKotlin fails with "File google-services.json
+   is missing" before one line is compiled.
+
+ --- 3.4  Where the APKs land ----------------------------------------------
 
    app\build\outputs\apk\release\app-release.apk   <- install this one
    app\build\outputs\apk\debug\app-debug.apk
 
- --- 3.4  Installing -------------------------------------------------------
+ --- 3.5  Prebuilt APKs in this repository ---------------------------------
+
+   dist\release\SIREN-v2.6.0-release.apk    signed, minified
+   dist\debug\SIREN-v2.7.0-debug.apk        unminified, debuggable, has logcat
+
+   The newest work (v2.7.0) is currently DEBUG ONLY. Both variants share the
+   application id com.research.siren but are signed with different keys, so
+   THEY CANNOT BE INSTALLED SIDE BY SIDE - uninstall one before installing the
+   other. For the defence, build and sign a v2.7.0 release rather than handing
+   out the debug APK.
+
+ --- 3.6  Installing -------------------------------------------------------
 
    IMPORTANT: uninstall any older S.I.R.E.N. build from the phone first
    (Settings -> Apps -> S.I.R.E.N. -> Uninstall). The signing key changed, so
@@ -148,48 +268,95 @@
    Then copy the APK to the phone and open it, or:
      adb install -r app\build\outputs\apk\release\app-release.apk
 
+   AFTER INSTALLING, CHECK TWO OS PERMISSIONS. Both fail silently:
+     * Notifications ON        - or no alert ever arrives
+     * Full-screen alerts      - Android 14+ denies this by default; the alarm
+                                 still sounds but nothing appears on screen
+   Settings inside the app reads both back and links straight to the OS screen
+   that changes them.
+
 -------------------------------------------------------------------------------
  SECTION 4 - USING THE APP
 -------------------------------------------------------------------------------
 
  First run:
-   1. Tap "Create an account"
+   1. A fresh install opens on "Create an account" (not Login) - a new phone
+      has no credentials to sign in with. It flips to Login once an account
+      has been created or signed into on that device.
    2. Choose a role - Student, Teacher/School Admin, or Parent/Guardian
    3. Enter name, email, password (6+ characters)
 
+ The role is NOT permanent - it can be changed later in Settings -> Switch
+ role. Name, class and mobile are editable in Settings -> Edit profile, and a
+ profile picture can be set there too.
+
+ --- PARENTS AND STUDENTS ---------------------------------------------------
+
  Students get a 6-character LINKING CODE, shown in Settings. A parent enters
- that code under Home -> Link to follow that student's safety status.
+ that code to request a link.
 
- Teachers see the roster for their class. The roster is driven by the classId
- field on each student's user document - set it in the Firestore console
- (users -> pick a student -> add field classId, e.g. "Grade 10 - Rizal") and set
- the same classId on the teacher's own document.
+ THE STUDENT MUST CONFIRM IT. The request shows up on the student's phone
+ under Parents & Guardians, and the parent sees nothing until it is approved.
+ A code gets read aloud across a classroom, and without this step anyone who
+ overheard one could follow that student's live safety feed unannounced.
+ Either side can revoke the link afterwards by declining it.
 
- Demo Mode (Student home -> Demo Mode) fires a simulated Green / Yellow / Red
- alert without the hardware. Simulated events are tagged DEMO everywhere they
- appear and are never sent to guardians by SMS.
+ --- TEACHERS ---------------------------------------------------------------
 
- --- THE ALARM ------------------------------------------------------------
+ An adviser sets their class name in Settings -> Edit profile, then adds
+ students to it with each student's linking code. That writes classId on the
+ student, which is what drives the roster and the live roll call. No Firestore
+ console editing is needed, and no student confirmation either - a teacher
+ adding a student to their own class is an authoritative school act.
 
- A RED alert (>= 0.61 g) sounds an alarm that KEEPS GOING until someone taps.
- It survives the screen locking, the app being closed, the notification being
- swiped away, and the phone being on silent.
+ --- DEMO MODE --------------------------------------------------------------
+
+ Student home -> Demo Mode fires a simulated Green / Yellow / Red alert with
+ no hardware involved. Simulated events are tagged "DEMO - NOT A REAL EVENT"
+ everywhere they appear, including the full-screen alert, so a simulation can
+ never be mistaken for a real earthquake during the defence.
+
+ There is no automated SMS anywhere in this app - not for real events, not for
+ demos. The Emergency Contacts screen opens the phone's own dialler or SMS
+ composer when you tap a contact; the app never sends anything by itself.
+
+ --- EMERGENCY CONTACTS -----------------------------------------------------
+
+ Three official City of Bogo responders are seeded on first run: Bogo Police
+ Station (primary), Emergency Response Unit, and Bogo Fire Department. A
+ contact you delete stays deleted; if any of the three are missing, a "Restore
+ official numbers" button appears on that screen.
+
+ --- THE ALARM --------------------------------------------------------------
+
+ A RED alert (>= 0.120 g, Intensity VII+) sounds an alarm that KEEPS GOING
+ until someone taps. It survives the screen locking, the app being closed, the
+ notification being swiped away, the phone being on silent or DND, and a phone
+ call taking audio focus.
 
  It stops ONLY by tapping one of:
    * I'm Safe
    * I Need Help
    * Stop alarm   (silences the sound but you still owe a safety response)
 
- Green is a single chime. Yellow repeats then stops after 30 seconds.
+ Green is a single chime and respects the ringer. Yellow repeats then stops
+ after 30 seconds.
 
- The tone is our own, NOT the official NDRRMC alert tone. That is deliberate:
- this app is a supplementary school tool and must never be mistaken for an
- official government warning during a real earthquake.
+ THE TONE IS THE NDRRMC ALERT AUDIO, supplied by the project owner and used at
+ their explicit direction (app\src\main\res\raw\siren_alarm.mp3).
+
+ Worth knowing if this app is ever handed out beyond the school: an identical
+ official tone can lead people to take a supplementary school project for an
+ official PHIVOLCS warning, and reproducing official emergency signals outside
+ genuine alerts is restricted in some jurisdictions. A distinct synthesised
+ replacement can be generated at any time with tools\make-alarm-tone.ps1 and
+ dropped in as siren_alarm.wav.
 
  ON ANDROID 14 AND NEWER: if the phone denies the "full screen intent"
  permission, the full-screen alert will not appear. The alarm still sounds and
  the notification still carries the I'm Safe / I Need Help / Stop alarm
- buttons. Test this before the defence.
+ buttons. TEST WITH IT DENIED before the defence - that is the state a fresh
+ install is in.
 
 -------------------------------------------------------------------------------
  SECTION 5 - SIGNING KEY
@@ -198,15 +365,20 @@
  siren-release.jks    the key (KEEP IT - back it up)
  keystore.properties  the passwords Gradle reads
 
- Both live in the project root. If you lose either one you cannot ship an update
- to an already-installed app; you would have to generate a new key and make
- everyone uninstall and reinstall again.
+ Both live in the project root and neither is in this repository. If you lose
+ either one you cannot ship an update to an already-installed app; you would
+ have to generate a new key and make everyone uninstall and reinstall again.
+ That has already happened once, when the v1.0 key was lost with the old
+ project folder. Back these up somewhere that is not this computer.
 
  To generate a replacement (only if lost):
 
-   & "C:\siren_toolchain\jdk-17.0.20+8\bin\keytool.exe" -genkeypair -v `
+   & "$env:JAVA_HOME\bin\keytool.exe" -genkeypair -v `
      -keystore siren-release.jks -alias siren -keyalg RSA -keysize 2048 `
      -validity 10000
+
+ A new key also means a new SHA-256, so re-register it in Firebase
+ (section 2.6) or phone sign-up breaks on the release build.
 
 -------------------------------------------------------------------------------
  SECTION 6 - FIRESTORE DATA SHAPE
@@ -215,9 +387,11 @@
  users/{userId}
    name                string
    email               string
+   phone               string
    role                "student" | "teacher" | "parent"
    classId             string    (teacher roster + student membership)
    schoolId            string
+   photo               string    (base64 JPEG profile picture, ~20 KB, or "")
    shortCode           string    (students only - the parent linking code)
    linkedStudentIds    array     (parents only)
 
@@ -237,10 +411,40 @@
    status              "safe" | "needs_help" | "no_response"
    respondedAt         timestamp
 
- Intensity thresholds (must match the firmware):
-   green  <= 0.30 g
-   yellow    0.31 - 0.60 g
-   red    >= 0.61 g
+ linkRequests/{studentId}_{parentId}
+   studentId, studentName
+   parentId, parentName, parentContact
+   status              "pending" | "approved" | "declined"
+   requestedAt, respondedAt
+
+ Profile pictures are stored on the user document as base64, not in Firebase
+ Storage - about 20 KB against Firestore's 1 MiB document limit, and they
+ arrive on a snapshot the app already listens to. There is no Storage bucket
+ to set up.
+
+ --- INTENSITY THRESHOLDS  (MUST MATCH THE FIRMWARE) ------------------------
+
+   Band     Shown to users                    g range          Behaviour
+   -----    ------------------------------    -------------    ---------------
+   Green    Intensity I-IV, Light shaking     0.000 - 0.010    notification
+                                                               + one vibration
+   Yellow   Intensity V-VI, Moderate shaking  0.010 - 0.120    full-screen
+                                                               alert, repeating
+                                                               vibration, stops
+                                                               after 30 s
+   Red      Intensity VII+, Destructive       >= 0.120         alarm loops until
+                                                               dismissed
+
+   The app reads these from Intensity.fromMagnitude in
+   shared\src\commonMain\kotlin\com\siren\mobile\model\Models.kt.
+   The firmware reads them from BAND_YELLOW_G / BAND_RED_G in siren_esp32.ino.
+   CHANGE ONE AND YOU MUST CHANGE THE OTHER, or the hardware and the phone
+   disagree about what colour an earthquake is.
+
+   Every readout shows the intensity level first and large ("Intensity V-VI"),
+   with the measured ground acceleration underneath in smaller type, to three
+   decimals - the Green band is only 0.010 g wide, so two decimals would print
+   a 0.005 g reading at the Yellow boundary.
 
 -------------------------------------------------------------------------------
  SECTION 7 - TESTING CHECKLIST
@@ -248,8 +452,26 @@
 
  1. Demo Mode: fire all three levels, confirm colour, vibration and the
     full-screen alert behave differently at each level.
- 2. Full loop: tap I'm Safe on one phone, confirm it appears on a teacher or
+ 2. Alarm persistence: fire a Red, then lock the phone, swipe the
+    notification away, and put the phone on silent. It must still be sounding.
+    Confirm it stops on I'm Safe / I Need Help / Stop alarm and nothing else.
+ 3. Full-screen intent DENIED: turn that permission off and fire a Red. The
+    alarm must still sound and the notification buttons must still work.
+ 4. Full loop: tap I'm Safe on one phone, confirm it appears on a teacher or
     parent account on a second phone/account.
- 3. Offline: turn on airplane mode, tap I'm Safe, turn data back on, confirm
+ 5. Parent linking: request with a student's code, approve it on the student's
+    phone, confirm the parent then sees the status. Decline one too.
+ 6. Teacher roster: set a class in Edit profile, add a student by code,
+    confirm they appear in the roll call.
+ 7. Offline: turn on airplane mode, tap I'm Safe, turn data back on, confirm
     the response syncs (Firestore queues it on device automatically).
- 4. Push: send a test message to topic "alerts" from the Firebase console.
+ 8. Push: send a test message to topic "alerts" from the Firebase console.
+    This proves subscription only - see section 2.4. It will not sound the
+    alarm, and that is expected.
+ 9. SAFETY GUIDE ICONS AND FONTS ACTUALLY RENDER. This is the canary for the
+    Compose-resources packaging workaround - if the build packaged them
+    wrongly the app still compiles and installs, and every icon and font
+    fails only at runtime. Open the Safety Guide on the release APK and look.
+10. Release APK only: confirm res\raw\siren_alarm.mp3 survived resource
+    shrinking. It has been silently deleted by the shrinker before, shipping a
+    completely silent alarm while the build reported success.

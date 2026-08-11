@@ -23,7 +23,7 @@ evaluation phase.
 $env:JAVA_HOME="C:\Program Files\Eclipse Adoptium\jdk-17.0.20.8-hotspot"
 $env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
 $env:Path="$env:JAVA_HOME\bin;$env:Path"
-cd C:\Users\Administrator\Desktop\Project
+cd <repo root>          # wherever this clone lives
 
 .\gradlew.bat :app:assembleDebug                    # Android debug APK
 .\gradlew.bat :app:assembleRelease                  # signed release APK
@@ -455,8 +455,18 @@ open it at all.
 ## Intensity thresholds
 
 Must stay in lockstep with the firmware — `Intensity.fromMagnitude` here,
-`BAND_YELLOW_G` / `BAND_RED_G` in `siren_esp32.ino`. Change one and the hardware and
-the phone disagree about what colour an earthquake is.
+`BAND_YELLOW_G` / `BAND_RED_G` in `firmware/siren_esp32/siren_esp32.ino`. Change one and
+the hardware and the phone disagree about what colour an earthquake is.
+
+**The research paper is the authority for these numbers**, not either codebase. It states
+them in both the methodology and the Definition of Terms. The firmware shipped with
+`0.31` / `0.61` — off by 5–30× — and was corrected to match; check the paper before
+assuming code is right.
+
+Still open: `MIN_TRIGGER_G = 0.08f` gates all detection and sits above the whole Green
+band and most of Yellow, so Green cannot currently fire from the sensor. Setting it
+properly needs real ADXL335 calibration data — run `calibrate()` and read the `triggerG`
+it prints.
 
 | Band | Shown to users | g range | Level | Behaviour |
 |---|---|---|---|---|
@@ -553,7 +563,7 @@ uninstall before installing.
 
 ## Out of scope
 
-- ESP32 firmware (separate hardware repo)
+- ESP32 hardware design and wiring (the sketch itself now lives in `firmware/siren_esp32/`)
 - QR-code scanning for parent linking (needs a camera dependency; code entry only)
 - Structural damage assessment, evacuation routing, search-and-rescue
 - Replacing official PHIVOLCS warnings — supplementary local tool only

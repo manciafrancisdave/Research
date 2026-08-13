@@ -16,7 +16,13 @@ named `SIREN-v<version>-debug.apk`.
 
 | File | Version | Size | Built |
 |---|---|---|---|
-| `SIREN-v2.7.0-debug.apk` | 2.7.0 (versionCode 5) | 25.7 MB | 8 Aug 2026 |
+| `SIREN-v2.7.0-debug.apk` | 2.7.0 (versionCode 5) | 25.7 MB | 13 Aug 2026 |
+
+**This file was rebuilt on 13 Aug and carries the full-screen alarm fix; the 8 Aug
+build it replaced does not.** Both are `2.7.0 (versionCode 5)`, so the version
+string cannot tell them apart and a phone will not treat the new one as an
+update. Uninstall before installing, or bump `versionCode` before handing this
+build to anyone who already has the old one.
 
 Verified against the built artifact, not assumed:
 
@@ -25,6 +31,9 @@ Verified against the built artifact, not assumed:
   `assets/composeResources/com.siren.mobile.resources/`, which AGP 9's
   KMP-library plugin does not package on its own
 - 15 `classes*.dex` — R8 is off, as expected for debug
+- **`SYSTEM_ALERT_WINDOW` reached the merged manifest** (`aapt2 dump badging`).
+  It is declared in `app/`, but the alarm service that relies on it lives in
+  `:shared`, so "it is in the source" and "it is in the APK" are separate claims
 
 **Not run.** No device or emulator was available. These are static checks: they
 prove it compiled, packaged and carries its resources. They do not prove it
@@ -57,8 +66,17 @@ uninstall before switching between them.
 
 1. Demo Mode at all three levels — colour, vibration, full-screen behaviour
 2. Lock the phone, trigger Red, confirm the screen wakes and the alert shows
-3. Deny full-screen alerts in Android settings, trigger Red again, confirm the
-   notification's I'm safe / I need help / Stop alarm buttons still work
-4. Respond on one account and verify it appears on a teacher or parent account
-5. Airplane mode → respond → reconnect → confirm the response syncs
-6. Open the Safety Guide — it is the canary for Compose-resource packaging
+3. **All four actions are on the alert itself** — Yes I'm safe, I need help,
+   the silence toggle, Dismiss. None of them should need a second screen
+4. **The three fallback layers, tested in order.** Each one only matters when the
+   one above it is refused, so testing with everything granted proves nothing:
+   - Both grants denied → launch the app, confirm it *asks*; trigger Red,
+     confirm the notification's I'm safe / I need help / Stop alarm still work
+   - Full-screen alerts denied, pop-up windows allowed → lock the phone, trigger
+     Red, confirm the alert comes up anyway (this is `raiseAlertScreen`)
+   - Full-screen alerts allowed → confirm the alert appears **once**, not twice
+5. Trigger Yellow on a locked phone — it now takes the screen too, which it did
+   not before
+6. Respond on one account and verify it appears on a teacher or parent account
+7. Airplane mode → respond → reconnect → confirm the response syncs
+8. Open the Safety Guide — it is the canary for Compose-resource packaging

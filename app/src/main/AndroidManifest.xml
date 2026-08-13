@@ -16,6 +16,12 @@
          service are the required fallback. Settings → "Full-screen alerts" reports
          the current grant and links straight to the OS screen that changes it. -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- Nothing is ever drawn over another app. This is requested solely because it is
+         the one documented exemption from the Android 10+ ban on background activity
+         starts, which is what lets SirenAlarmService raise the alert screen itself on the
+         phones where USE_FULL_SCREEN_INTENT above is denied. Optional, never requested at
+         first launch, and the notification actions still work without it. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- Lets the alarm keep sounding through a Doze window. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 

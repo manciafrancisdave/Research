@@ -121,6 +121,23 @@ interface PlatformServices {
     /** Whether the user has allowed notifications at all. */
     fun notificationsEnabled(): Boolean
 
+    /**
+     * Whether the alarm can raise the full-screen alert **itself**, without relying on
+     * the full-screen intent.
+     *
+     * This is the second half of the problem [canUseFullScreenIntent] describes. When the
+     * intent is denied the OS quietly downgrades a Red alert to a heads-up notification,
+     * and the app's own attempt to start the alert Activity is then blocked as well —
+     * Android 10 forbids background activity starts. Permission to draw over other apps
+     * is the documented exemption from that rule, and it is what alarm clocks rely on for
+     * the same reason. Without one of the two grants a locked phone can only ever show a
+     * notification, however loudly the alarm is sounding behind it.
+     */
+    fun canLaunchAlertOverOtherApps(): Boolean
+
+    /** Opens the OS screen where the user can allow drawing over other apps. */
+    fun openOverlaySettings()
+
     // --------------------------------------------------------- profile photo
 
     /** Whether this platform can open an image picker. */
@@ -178,6 +195,8 @@ private object NoOpPlatformServices : PlatformServices {
     override fun openFullScreenIntentSettings() = Unit
     override fun openNotificationSettings() = Unit
     override fun notificationsEnabled() = true
+    override fun canLaunchAlertOverOtherApps() = true
+    override fun openOverlaySettings() = Unit
     override val photoPickerSupported = false
     override suspend fun pickProfilePhoto(): String? = null
 }

@@ -147,10 +147,16 @@ Each of these cost a debugging cycle:
   a completely silent alarm. `app/src/main/res/raw/keep.xml` pins it. After touching
   shrinking, always confirm the *release* APK still contains `res/raw/siren_alarm.mp3` —
   a passing build proves nothing here.
-- **Android 14+ restricts `USE_FULL_SCREEN_INTENT`** to calling/alarm apps. If it is
-  denied, the full-screen alert silently never appears — leaving a user with a looping
-  alarm and no visible way to stop it. The alarm notification's **I'm safe / I need
-  help / Stop alarm** actions are the required fallback; test with it denied.
+- **Android 14+ restricts `USE_FULL_SCREEN_INTENT`** to calling/alarm apps, and denies it
+  by default. If it is denied, the full-screen alert silently never appears — leaving a
+  user with a looping alarm and no visible way to stop it. Three layers answer that, and
+  they are ordered: the app **asks** for the grant on launch; failing that
+  `SirenAlarmService.raiseAlertScreen` starts the alert Activity itself under the
+  `SYSTEM_ALERT_WINDOW` exemption; failing *that*, the notification's **I'm safe / I need
+  help / Stop alarm** actions remain the fallback. Test with it denied — that is the
+  default state on a real phone, not the edge case.
+- **`raiseAlertScreen` must no-op when the full-screen intent is allowed.** Both paths
+  target the same Activity, so letting them both fire races the notification's own launch.
 - **Notification channel settings are immutable after creation.** Changing sound or
   vibration on `siren_alerts` does nothing on existing installs — bump the channel id.
   The alarm service uses its own **silent** channel (`siren_alarm_playback`) precisely
@@ -219,6 +225,15 @@ when audio focus is lost to a call. The three exits are **I'm Safe**, **I Need H
 and **Stop alarm** — and "Stop alarm" silences the sound while deliberately leaving the
 safety confirmation outstanding.
 
+**All three exits are on `AlertScreen` itself**, not behind it. They used to be: the
+alert screen offered a single "Confirm Your Status" that navigated to
+`SafetyConfirmationScreen`, so on the phones where the full-screen intent is denied the
+notification actions were the *only* place "I'm safe" and "I need help" existed.
+`onConfirmStatus` still opens the detailed safety screen — response timestamp, locked
+answer — but nothing that ends an alarm is behind that step any more. Responding silences
+the alarm because `submitMyResponse` calls `stopAlarm()` first, which is also what the
+notification actions do.
+
 | Level | Sound | Vibration | Service |
 |---|---|---|---|
 | Green — Intensity I–IV | single chime, respects ringer | one pulse | none |
@@ -265,13 +280,32 @@ on a PIN-locked phone prompts for the PIN, which is the last thing to put betwee
 and an earthquake warning. Showing over the lock screen is enough, and the notification's
 I'm safe / I need help actions work from there.
 
-### Two OS grants that fail silently
+### Three OS grants that fail silently
 
 Notifications being off, and full-screen alerts being denied, both produce *no error*:
 the first means no alert ever arrives, the second means a Red event sounds the alarm with
 nothing on screen to explain it. Settings reads both back
 (`notificationsEnabled()` / `canUseFullScreenIntent()`) and links to the OS screen that
-changes them. That is the only way a user finds out.
+changes them.
+
+Settings reporting them was not enough. A grant nobody knows to look for is a grant
+nobody has, and on a stock Android 14 phone the default state is denied — so every Red
+alert arrived exactly as the notification-only screenshot showed it, alarm looping behind
+a heads-up banner. `AppContent` now **asks** on launch, once, whenever the alert has no
+way onto the screen at all.
+
+The third grant is `SYSTEM_ALERT_WINDOW` ("Display over other apps"), read through
+`canLaunchAlertOverOtherApps()`. **Nothing is ever drawn over another app.** It is
+requested only because it is the one documented exemption from the Android 10+ ban on
+background activity starts, which is what otherwise stops `SirenAlarmService` from
+launching the alert Activity itself once the full-screen intent has been refused. Either
+grant is sufficient, so the prompt appears only when both are missing, and it offers both
+routes because several OEM builds do not ship the
+`ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT` screen at all — on those, the pop-up
+permission is the only way through.
+
+The notification actions remain the last fallback and are not going anywhere: with
+neither grant, they are still the only way to answer.
 
 ### The push payload must be data-only
 

@@ -259,6 +259,17 @@ class IosPlatformServices(
 
     override fun notificationsEnabled(): Boolean = true
 
+    /**
+     * There is no iOS analogue and nothing for the user to grant. Background activity
+     * starts are not a concept here — an app cannot put itself on screen at all, so the
+     * alert arrives as a notification (a critical one, given the entitlement) and the
+     * "allow this" prompt the Android side shows would be asking for something that does
+     * not exist. Reporting true keeps that prompt off iOS entirely.
+     */
+    override fun canLaunchAlertOverOtherApps(): Boolean = true
+
+    override fun openOverlaySettings() = openAppSettings()
+
     // --------------------------------------------------------- profile photo
 
     /**

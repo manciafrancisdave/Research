@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +32,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -493,6 +496,61 @@ private fun AppContent() {
         }
     }
 
+    // ----------------------------------------------- alert visibility prompt
+
+    /**
+     * Asks for the grants that decide whether an alert can be *seen*.
+     *
+     * Settings has reported both of these for a while, but nothing ever brought them up,
+     * and a grant nobody knows to look for is a grant nobody has: on a stock Android 14
+     * phone every Red alert was arriving as a heads-up notification with the alarm
+     * sounding behind it. Neither grant produces an error when missing, which is exactly
+     * why the app has to raise it rather than wait to be asked.
+     *
+     * It is shown when **both** are missing — either one is enough to get the alert on
+     * screen — and only once per launch, so it stops as soon as one is granted and never
+     * blocks somebody who has decided against it.
+     */
+    var alertVisibilityAsked by remember { mutableStateOf(false) }
+    val alertCanTakeOverScreen = remember(current) {
+        Platform.services.canUseFullScreenIntent() || Platform.services.canLaunchAlertOverOtherApps()
+    }
+    if (!alertCanTakeOverScreen && !alertVisibilityAsked) {
+        AlertDialog(
+            onDismissRequest = { alertVisibilityAsked = true },
+            title = { Text("Let earthquake alerts show on screen") },
+            text = {
+                Text(
+                    "Right now an alert can only appear as a notification. Android blocks " +
+                        "full-screen alerts by default, so an earthquake would sound the " +
+                        "alarm with nothing on screen explaining it — and on a locked " +
+                        "phone that is all anyone would see.\n\n" +
+                        "Allowing either one below lets the alert itself come up, with " +
+                        "\"I'm safe\" and \"I need help\" on it."
+                )
+            },
+            confirmButton = {
+                // Two routes because they are not equally available: the full-screen
+                // grant is the right one and exists from Android 14, but several OEM
+                // builds do not ship that settings screen at all, and on those the
+                // pop-up permission is the only way through.
+                Column {
+                    TextButton(onClick = {
+                        alertVisibilityAsked = true
+                        Platform.services.openFullScreenIntentSettings()
+                    }) { Text("Allow full-screen alerts") }
+                    TextButton(onClick = {
+                        alertVisibilityAsked = true
+                        Platform.services.openOverlaySettings()
+                    }) { Text("Allow pop-up windows") }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { alertVisibilityAsked = true }) { Text("Not now") }
+            },
+        )
+    }
+
     // --------------------------------------------------- full-screen alert
 
     val incoming = incomingAlert
@@ -535,6 +593,8 @@ private fun AppContent() {
                     AlertScreen(
                         alert = incoming,
                         vibrationEnabled = settings.vibration,
+                        myResponse = myResponses[incoming.id],
+                        onRespond = { repo.submitMyResponse(incoming.id, it) },
                         onConfirmStatus = { confirming = true },
                         onDismiss = { repo.consumeIncomingAlert() },
                     )

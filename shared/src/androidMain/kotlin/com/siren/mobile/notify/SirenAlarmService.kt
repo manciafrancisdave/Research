@@ -19,6 +19,7 @@ import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -53,6 +54,15 @@ class SirenAlarmService : Service() {
         const val EXTRA_MAGNITUDE = "magnitude"
         const val EXTRA_TIMEOUT_MS = "timeoutMs"
         const val EXTRA_VIBRATE = "vibrate"
+
+        /**
+         * The key the launched Activity reads the alert id from — deliberately *not*
+         * [EXTRA_ALERT_ID], which is this service's own intent vocabulary. The value must
+         * stay equal to `AndroidPlatformServices.EXTRA_ALERT_ID`, because that is the
+         * string `MainActivity.handleIntent` looks for; the constant cannot be shared
+         * without this library depending on the app module.
+         */
+        private const val EXTRA_LAUNCH_ALERT_ID = "extra_alert_id"
 
         /** Its own channel, silent: the audio comes from MediaPlayer, so letting the
          *  notification play a sound too would double it up. */
@@ -154,7 +164,13 @@ class SirenAlarmService : Service() {
         }
 
         acquireWakeLock()
-        if (intensity != Intensity.GREEN) wakeScreen()
+        if (intensity != Intensity.GREEN) {
+            wakeScreen()
+            // Order matters: the display has to be coming up before the alert is
+            // launched, or the Activity starts behind a dark screen and the user gets
+            // the alarm with nothing to look at.
+            raiseAlertScreen(alertId)
+        }
         requestFocus(intensity)
         startPlayback(intensity)
         if (vibrate) startVibration(intensity)
@@ -275,6 +291,58 @@ class SirenAlarmService : Service() {
         }
     }
 
+    /**
+     * Whether the OS will honour the notification's full-screen intent.
+     *
+     * Duplicated from `AndroidPlatformServices.canUseFullScreenIntent` rather than shared,
+     * because this service must answer it during `onStartCommand` on a process that a
+     * high-priority push has just woken — `Platform.services` is installed from
+     * `SirenApp.onCreate` and is reliably present, but reaching back through the shared
+     * facade for one system query the service can make directly buys nothing and adds a
+     * start-order dependency to the one code path that must not have any.
+     */
+    private fun fullScreenIntentAllowed(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
+        val manager = getSystemService(NotificationManager::class.java) ?: return false
+        return runCatching { manager.canUseFullScreenIntent() }.getOrDefault(false)
+    }
+
+    /**
+     * Puts the alert on screen when the full-screen intent will not.
+     *
+     * Android 14 denies `USE_FULL_SCREEN_INTENT` to anything that is not a calling or
+     * alarm app, and the failure is silent: the notification is simply drawn as a heads-up
+     * banner instead. That is the state a Red alert was reaching in practice — a looping
+     * alarm behind a notification the user has to find and expand.
+     *
+     * Starting the Activity from here is normally blocked too (background activity starts
+     * have been forbidden since Android 10), so it is attempted only with the
+     * `SYSTEM_ALERT_WINDOW` grant that exempts it. With neither grant the notification
+     * actions remain the fallback, which is why they are not going anywhere.
+     *
+     * No-op when the intent *is* allowed: letting both fire would race the notification's
+     * own launch and could start the Activity twice.
+     */
+    private fun raiseAlertScreen(alertId: String) {
+        val target = activityClass ?: return
+        if (fullScreenIntentAllowed()) return
+        if (!runCatching { Settings.canDrawOverlays(this) }.getOrDefault(false)) {
+            Log.w(
+                TAG,
+                "Full-screen intent denied and no overlay grant: the alert can only be a " +
+                    "notification. Grant either in Settings → Alert visibility.",
+            )
+            return
+        }
+        runCatching {
+            startActivity(
+                Intent(this, target)
+                    .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    .putExtra(EXTRA_LAUNCH_ALERT_ID, alertId)
+            )
+        }.onFailure { Log.e(TAG, "Direct alert launch refused", it) }
+    }
+
     // -------------------------------------------------------- notification
 
     private fun ensureChannel() {
@@ -313,7 +381,7 @@ class SirenAlarmService : Service() {
                 alertId.hashCode(),
                 Intent(this, it)
                     .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                    .putExtra("extra_alert_id", alertId),
+                    .putExtra(EXTRA_LAUNCH_ALERT_ID, alertId),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
         }
@@ -338,7 +406,11 @@ class SirenAlarmService : Service() {
 
         open?.let {
             builder.setContentIntent(it)
-            if (intensity == Intensity.RED) builder.setFullScreenIntent(it, true)
+            // Yellow gets the full-screen intent too. The intensity table has always
+            // specified a full-screen alert for it, but it only ever appeared when the app
+            // happened to be open already — a Yellow arriving on a locked phone was a
+            // notification and nothing more, which is not what the table says.
+            if (intensity != Intensity.GREEN) builder.setFullScreenIntent(it, true)
         }
 
         val notification = builder.build()

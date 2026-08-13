@@ -7,6 +7,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,8 +19,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.HowToReg
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Sos
+import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
@@ -40,6 +44,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material3.TextButton
 import com.siren.mobile.model.AlertRecord
 import com.siren.mobile.model.AlertSource
+import com.siren.mobile.model.ResponseStatus
+import com.siren.mobile.model.SafetyResponse
 import com.siren.mobile.platform.Platform
 import com.siren.mobile.ui.components.ButtonTone
 import com.siren.mobile.ui.components.Pill
@@ -50,17 +56,29 @@ import com.siren.mobile.ui.components.intensityColor
 import com.siren.mobile.util.DateFmt
 import com.siren.mobile.util.asGSpaced
 import com.siren.mobile.util.tabular
+import com.siren.mobile.ui.theme.Danger
 import com.siren.mobile.ui.theme.Layout
+import com.siren.mobile.ui.theme.Safe
 import com.siren.mobile.ui.theme.Space
 
 /**
  * Prototype screen 08 — the full-screen alert. Background, badge and haptic pattern all
  * escalate with the measured peak ground acceleration.
+ *
+ * **Every action lives on this screen, not one navigation step away.** When a full-screen
+ * intent raises this on a locked phone it is the only thing the user can see, and the
+ * alarm is already sounding — so "I'm safe" and "I need help" have to be answerable right
+ * here. Routing them through a second screen meant that on the phones where the
+ * full-screen intent is denied, the notification's actions were the *only* place those
+ * two answers existed. [onConfirmStatus] still opens the detailed safety screen for the
+ * response timestamp and the locked-answer state, but nothing essential is behind it.
  */
 @Composable
 fun AlertScreen(
     alert: AlertRecord,
     vibrationEnabled: Boolean,
+    myResponse: SafetyResponse?,
+    onRespond: (ResponseStatus) -> Unit,
     onConfirmStatus: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -115,7 +133,13 @@ fun AlertScreen(
             }
         }
 
-        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+        // Scrolls because the action buttons below are fixed-height and take their space
+        // first: on a short screen this block is what gets squeezed, and silently cropping
+        // the intensity readout is the one thing this screen exists to show.
+        Box(
+            Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            contentAlignment = Alignment.Center,
+        ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(Space.l),
@@ -207,41 +231,113 @@ fun AlertScreen(
             )
         }
 
-        PrimaryButton(
-            text = "Confirm Your Status",
-            onClick = {
-                Haptics.cancel()
-                onConfirmStatus()
-            },
-            icon = Icons.Filled.HowToReg,
-            tone = ButtonTone.OnColor,
-            onColorContent = intensityColor(alert.intensity),
-        )
-
-        Text(
-            "Your adviser is notified the moment you respond.",
-            color = Color.White.copy(alpha = 0.85f),
-            style = MaterialTheme.typography.labelSmall,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        if (myResponse == null) {
+            // Both answers are white-on-colour so they read against the intensity
+            // gradient; the label colour is what separates them. Responding silences the
+            // alarm as a side effect of the answer being recorded, which is the
+            // behaviour the notification actions already had.
+            PrimaryButton(
+                text = "Yes, I'm safe",
+                onClick = {
+                    Haptics.cancel()
+                    onRespond(ResponseStatus.SAFE)
+                },
+                icon = Icons.Filled.CheckCircle,
+                tone = ButtonTone.OnColor,
+                onColorContent = Safe,
+            )
+            PrimaryButton(
+                text = "I need help",
+                onClick = {
+                    Haptics.cancel()
+                    onRespond(ResponseStatus.NEEDS_HELP)
+                },
+                icon = Icons.Filled.Sos,
+                tone = ButtonTone.OnColor,
+                onColorContent = Danger,
+            )
+            Text(
+                "Your adviser is notified the moment you respond.",
+                color = Color.White.copy(alpha = 0.85f),
+                style = MaterialTheme.typography.labelSmall,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(Layout.field))
+                    .background(Color.White.copy(alpha = 0.22f))
+                    .padding(Space.m),
+                horizontalArrangement = Arrangement.spacedBy(Space.s),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.TaskAlt, null, tint = Color.White, modifier = Modifier.size(22.dp))
+                Text(
+                    "Sent: ${myResponse.status.label}",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            // The answer is locked so the roll call stays accurate, but escalating from
+            // safe to needing help must never be closed off — the situation changes.
+            if (myResponse.status == ResponseStatus.SAFE) {
+                PrimaryButton(
+                    text = "I need help after all",
+                    onClick = {
+                        Haptics.cancel()
+                        onRespond(ResponseStatus.NEEDS_HELP)
+                    },
+                    icon = Icons.Filled.Sos,
+                    tone = ButtonTone.OnColor,
+                    onColorContent = Danger,
+                )
+            }
+        }
 
         // There must ALWAYS be a visible way out of a looping alarm. Silencing is
         // deliberately separate from responding: it quiets the sound but leaves the
-        // safety confirmation outstanding.
+        // safety confirmation outstanding. It reads as a two-state control rather than a
+        // one-shot button so that "already silent" is distinguishable from "not silenced
+        // yet" — on a screen this loud, a button that vanishes when tapped looks broken.
         Row(
             Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Space.l, Alignment.CenterHorizontally),
+            horizontalArrangement = Arrangement.spacedBy(Space.s, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (alarmActive) {
-                TextButton(onClick = { Platform.services.stopAlarm() }) {
-                    Text(
-                        "Silence alarm",
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                }
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(Layout.pill))
+                    .background(Color.White.copy(alpha = if (alarmActive) 0.22f else 0.10f))
+                    .clickable(enabled = alarmActive) { Platform.services.stopAlarm() }
+                    .padding(horizontal = Space.m, vertical = Space.s),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Filled.Vibration,
+                    null,
+                    tint = Color.White.copy(alpha = if (alarmActive) 1f else 0.55f),
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(
+                    if (alarmActive) "Silence alarm" else "Alarm silenced",
+                    color = Color.White.copy(alpha = if (alarmActive) 1f else 0.55f),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
+
+            TextButton(onClick = onConfirmStatus) {
+                Text(
+                    "Details",
+                    color = Color.White.copy(alpha = 0.8f),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+
             TextButton(onClick = {
                 Haptics.cancel()
                 onDismiss()

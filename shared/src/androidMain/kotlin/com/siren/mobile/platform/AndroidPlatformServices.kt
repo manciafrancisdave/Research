@@ -461,6 +461,39 @@ class AndroidPlatformServices(
         runCatching { NotificationManagerCompat.from(appContext).areNotificationsEnabled() }
             .getOrDefault(true)
 
+    /**
+     * "Display over other apps" — `SYSTEM_ALERT_WINDOW`.
+     *
+     * Nothing is drawn over anything. It is requested purely because it is the one
+     * documented exemption from the Android 10+ ban on background activity starts, which
+     * is what otherwise stops [SirenAlarmService] from raising the alert itself when the
+     * full-screen intent has been denied. On the OEM skins that are strictest about
+     * full-screen intents — this is the "Display pop-up windows while running in
+     * background" toggle on Xiaomi/HyperOS — it is the only remaining way to get an alert
+     * onto a locked screen.
+     */
+    override fun canLaunchAlertOverOtherApps(): Boolean =
+        runCatching { Settings.canDrawOverlays(appContext) }.getOrDefault(false)
+
+    override fun openOverlaySettings() {
+        val direct = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:${appContext.packageName}"),
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        // Some OEMs reject the package-scoped form and only accept the bare action, which
+        // lands on the full app list rather than this app's row. Worse than a deep link,
+        // better than nothing happening when the user taps Fix.
+        runCatching { appContext.startActivity(direct) }.onFailure {
+            runCatching {
+                appContext.startActivity(
+                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+        }
+    }
+
     // --------------------------------------------------------- profile photo
 
     override val photoPickerSupported: Boolean = true

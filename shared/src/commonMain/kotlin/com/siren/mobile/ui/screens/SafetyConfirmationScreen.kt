@@ -50,10 +50,6 @@ import com.siren.mobile.ui.theme.SafeTint
 import com.siren.mobile.ui.theme.SirenGradients
 import com.siren.mobile.ui.theme.Space
 
-/**
- * Prototype screen 09. Once submitted the answer is locked so the record stays accurate;
- * a student can still escalate to "I Need Help" while the event is open.
- */
 @Composable
 fun SafetyConfirmationScreen(
     alert: AlertRecord,
@@ -69,10 +65,7 @@ fun SafetyConfirmationScreen(
     Column(
         Modifier
             .fillMaxSize()
-            // This screen is shown as a full-screen overlay above the current tab, so it
-            // has to paint its own background — without one it drew straight through
-            // onto whatever was behind it. Belt and braces with the overlay in App(),
-            // because a transparent safety prompt is unreadable exactly when it counts.
+
             .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = Layout.screenPadding),
         verticalArrangement = Arrangement.spacedBy(Space.l),

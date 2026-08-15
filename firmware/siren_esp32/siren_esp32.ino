@@ -39,12 +39,6 @@ const uint8_t  MIN_SAMPLES_ABOVE = 8;
 const uint16_t ALERT_HOLD_MS     = 15000;
 const uint16_t COOLDOWN_MS       = 30000;
 
-// Must stay in lockstep with Intensity.fromMagnitude in the mobile app
-// (shared/src/commonMain/kotlin/com/siren/mobile/model/Models.kt) and with the
-// thresholds published in the research paper:
-//   Green  0.000 - 0.010 g   Intensity I-IV    light shaking
-//   Yellow 0.010 - 0.120 g   Intensity V-VI    moderate shaking
-//   Red    0.120 g and above Intensity VII+    destructive shaking
 const float BAND_YELLOW_G = 0.010f;
 const float BAND_RED_G    = 0.120f;
 
@@ -403,8 +397,7 @@ void fireAlert(float g) {
   tLed = millis();
 
   char line2[20];
-  // 3 decimals, not 2: the Green band is only 0.010 g wide, so "%.2f" would
-  // round a 0.005 g reading to "0.01 g" -- exactly the Yellow boundary.
+
   snprintf(line2, sizeof(line2), "%.3f g  %s", g, band);
   if (isRed)         lcdTwoLines("RED - TAKE COVER", line2);
   else if (isYellow) lcdTwoLines("YELLOW - ALERT",   line2);

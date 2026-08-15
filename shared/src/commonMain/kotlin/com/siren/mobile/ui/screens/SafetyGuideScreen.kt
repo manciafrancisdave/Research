@@ -30,10 +30,6 @@ import org.jetbrains.compose.resources.painterResource
 data class GuideItem(val icon: DrawableResource, val title: String, val body: String)
 data class GuideSection(val title: String, val items: List<GuideItem>)
 
-/**
- * Carried over from the shipped APK — the 28 ic_sg_* pictograms were recovered from it
- * and are reused here unchanged.
- */
 private val guideSections = listOf(
     GuideSection(
         "During the shaking",

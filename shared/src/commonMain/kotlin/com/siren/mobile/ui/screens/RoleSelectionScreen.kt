@@ -41,15 +41,6 @@ import com.siren.mobile.ui.components.PrimaryButton
 import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.Space
 
-/**
- * Prototype screen 03. The role is chosen before the account exists, so it can be
- * written into the user document at sign-up.
- *
- * This is now the **first** screen a fresh install shows. Somebody who has just
- * downloaded the app has no credentials to sign in with, so opening on a login form asks
- * them for something that does not exist yet; sign-in leads from here instead, and takes
- * over as the opening screen once an account exists on the device.
- */
 @Composable
 fun RoleSelectionScreen(
     onContinue: (Role) -> Unit,
@@ -138,7 +129,7 @@ private fun RoleCard(
 ) {
     Surface(
         onClick = onClick,
-        // Announced as a radio button so screen readers convey this is a choice.
+
         modifier = Modifier
             .fillMaxWidth()
             .semantics {

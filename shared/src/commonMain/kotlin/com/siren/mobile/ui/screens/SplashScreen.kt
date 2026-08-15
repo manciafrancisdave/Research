@@ -37,10 +37,6 @@ import com.siren.mobile.ui.theme.SirenGradients
 import com.siren.mobile.ui.theme.Space
 import org.jetbrains.compose.resources.painterResource
 
-/**
- * Prototype screen 01. Shown while Firebase resolves the session; the pulsing rings and
- * equaliser bars are the prototype's sirenPulse / sirenBar animations.
- */
 @Composable
 fun SplashScreen(versionName: String = "2.4.0") {
     val transition = rememberInfiniteTransition(label = "splash")

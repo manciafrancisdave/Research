@@ -89,13 +89,10 @@ private sealed interface Dest {
 
 private data class NavItem(val dest: Dest, val label: String, val icon: ImageVector)
 
-/** OS grants the app needs but cannot give itself. Both fail silently when missing. */
 private data class AlertPermissions(val notifications: Boolean, val fullScreen: Boolean)
 
-/** Which way the last navigation went, so transitions read correctly. */
 private enum class NavDirection { Forward, Back, Tab }
 
-/** Shared entry point — hosted by MainActivity on Android and MainViewController on iOS. */
 @Composable
 fun App() {
     val settings by SirenRepository.settings.collectAsState()
@@ -126,19 +123,14 @@ private fun AppContent() {
     val linkRequests by repo.linkRequests.collectAsState()
     val working by repo.working.collectAsState()
 
-    // Students see requests waiting on *them*; parents see requests they are waiting on.
-    // Same count, opposite meaning, which is why each screen words it differently.
     val pendingLinkRequests = linkRequests.count { it.status == LinkRequestStatus.PENDING }
 
-    /** Non-null between "code sent" and the user typing it in. */
     var phoneVerification by remember { mutableStateOf<PhoneVerification?>(null) }
 
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) {
         repo.events.collect { snackbar.showSnackbar(it.text) }
     }
-
-    // ------------------------------------------------------------ auth gate
 
     if (!authResolved) {
         SplashScreen(Platform.services.versionName)
@@ -147,8 +139,7 @@ private fun AppContent() {
 
     if (!signedIn) {
         AuthFlow(
-            // A device that has never held an account opens on Create Account; once one
-            // exists here, signing in becomes the common case and leads instead.
+
             startOnSignUp = !settings.hasAccount,
             loading = authLoading,
             error = authError,
@@ -194,8 +185,6 @@ private fun AppContent() {
         return
     }
 
-    // -------------------------------------------------------------- in-app
-
     val backStack = remember { mutableStateListOf<Dest>(Dest.Home) }
     var direction by remember { mutableStateOf(NavDirection.Tab) }
     val current = backStack.last()
@@ -220,7 +209,6 @@ private fun AppContent() {
 
     PlatformBackHandler(enabled = backStack.size > 1) { pop() }
 
-    /** Adds a student to the adviser's class and reports the outcome. */
     fun addStudentToClass(code: String) {
         scope.launch {
             val msg = when (val result = repo.linkStudentToClass(code)) {
@@ -228,19 +216,13 @@ private fun AppContent() {
                 LinkResult.NotFound -> "No student found for that code."
                 LinkResult.AlreadyLinked -> "That student is already in your class."
                 is LinkResult.Failed -> result.reason
-                // Advisers add directly; the request states cannot arise here.
+
                 is LinkResult.Requested, is LinkResult.AlreadyRequested -> "Student added."
             }
             snackbar.showSnackbar(msg)
         }
     }
 
-    /**
-     * OS-level grants, re-read whenever the app comes back to the foreground.
-     *
-     * Both are changed outside the app, in Android settings, so the only sane moment to
-     * re-check is when a screen that reports them is composed again.
-     */
     val permissionsChecked = remember(current) {
         AlertPermissions(
             notifications = Platform.services.notificationsEnabled(),
@@ -294,8 +276,7 @@ private fun AppContent() {
                 targetState = current,
                 label = "screen",
                 transitionSpec = {
-                    // Short and directional: forward slides in from the right, back
-                    // reverses it, tab switches simply cross-fade. All under 300ms.
+
                     when (direction) {
                         NavDirection.Tab ->
                             fadeIn(tween(180)) togetherWith fadeOut(tween(120))
@@ -496,21 +477,6 @@ private fun AppContent() {
         }
     }
 
-    // ----------------------------------------------- alert visibility prompt
-
-    /**
-     * Asks for the grants that decide whether an alert can be *seen*.
-     *
-     * Settings has reported both of these for a while, but nothing ever brought them up,
-     * and a grant nobody knows to look for is a grant nobody has: on a stock Android 14
-     * phone every Red alert was arriving as a heads-up notification with the alarm
-     * sounding behind it. Neither grant produces an error when missing, which is exactly
-     * why the app has to raise it rather than wait to be asked.
-     *
-     * It is shown when **both** are missing — either one is enough to get the alert on
-     * screen — and only once per launch, so it stops as soon as one is granted and never
-     * blocks somebody who has decided against it.
-     */
     var alertVisibilityAsked by remember { mutableStateOf(false) }
     val alertCanTakeOverScreen = remember(current) {
         Platform.services.canUseFullScreenIntent() || Platform.services.canLaunchAlertOverOtherApps()
@@ -530,10 +496,7 @@ private fun AppContent() {
                 )
             },
             confirmButton = {
-                // Two routes because they are not equally available: the full-screen
-                // grant is the right one and exists from Android 14, but several OEM
-                // builds do not ship that settings screen at all, and on those the
-                // pop-up permission is the only way through.
+
                 Column {
                     TextButton(onClick = {
                         alertVisibilityAsked = true
@@ -551,8 +514,6 @@ private fun AppContent() {
         )
     }
 
-    // --------------------------------------------------- full-screen alert
-
     val incoming = incomingAlert
     AnimatedVisibility(
         visible = incoming != null,
@@ -564,17 +525,7 @@ private fun AppContent() {
             Box(
                 Modifier
                     .fillMaxSize()
-                    // Opaque, and it swallows taps. Both matter.
-                    //
-                    // AlertScreen paints its own intensity gradient, so the missing
-                    // background only showed on SafetyConfirmationScreen — which drew
-                    // straight over whatever screen was behind it, stacking two headers
-                    // and rendering "Are you safe?" across the Demo list.
-                    //
-                    // The tap blocker is the more serious half: an overlay that does not
-                    // consume gestures lets them reach the screen underneath. Over Demo
-                    // mode that put "Trigger Red alert" live behind the confirmation
-                    // buttons, so answering a simulated event could fire another one.
+
                     .background(MaterialTheme.colorScheme.background)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
@@ -608,12 +559,6 @@ private const val STEP_LOGIN = 0
 private const val STEP_ROLE = 1
 private const val STEP_SIGN_UP = 2
 
-/**
- * Login → role → sign-up, entered at whichever end suits the device.
- *
- * [startOnSignUp] is what puts Create Account in front of Login on a fresh install. The
- * two screens still reach each other in both directions; only the entry point moves.
- */
 @Composable
 private fun AuthFlow(
     startOnSignUp: Boolean,
@@ -632,8 +577,6 @@ private fun AuthFlow(
     var step by remember { mutableStateOf(if (startOnSignUp) STEP_ROLE else STEP_LOGIN) }
     var role by remember { mutableStateOf(Role.STUDENT) }
 
-    // Backing out of sign-up must abandon any half-finished SMS verification, or
-    // returning to it later would show a code field for a number nobody re-entered.
     fun leaveSignUp(target: Int) {
         onCancelPhone()
         onClearError()
@@ -673,8 +616,7 @@ private fun AuthFlow(
                     onClearError()
                     step = STEP_LOGIN
                 },
-                // On a fresh install this is the first screen, so there is nowhere to go
-                // back to and the arrow is hidden rather than left as a dead control.
+
                 onBack = if (startOnSignUp) null else ({ step = STEP_LOGIN }),
             )
 

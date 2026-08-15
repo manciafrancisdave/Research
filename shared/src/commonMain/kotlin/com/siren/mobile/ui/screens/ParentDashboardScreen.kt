@@ -46,7 +46,6 @@ import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.SirenTheme
 import com.siren.mobile.ui.theme.Space
 
-/** Prototype screen 07. */
 @Composable
 fun ParentDashboardScreen(
     user: UserProfile,
@@ -88,8 +87,6 @@ fun ParentDashboardScreen(
 
         if (!online) item { OfflineBanner() }
 
-        // A request the student has not answered yet looks identical to no request at
-        // all from here, which is how a parent ends up typing the same code repeatedly.
         if (pendingRequests > 0) {
             item {
                 InfoBanner(
@@ -190,8 +187,7 @@ fun ParentDashboardScreen(
                     onClick = { onCall(schoolHotline) },
                 )
                 RowDivider()
-                // Guardians get the guide too: a parent reaching a collapsed school
-                // needs the same do-not-enter-a-damaged-building advice a student does.
+
                 TileRow(
                     icon = Icons.Filled.MenuBook,
                     title = "Safety guide",

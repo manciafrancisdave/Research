@@ -28,17 +28,6 @@ import com.siren.mobile.model.Intensity
 import com.siren.mobile.model.ResponseStatus
 import com.siren.mobile.platform.Platform
 
-/**
- * Plays the emergency alarm from a foreground service.
- *
- * A foreground service is the point of this class: audio driven from a composable or
- * an Activity dies the moment the app is backgrounded, which is exactly when an
- * earthquake alarm most needs to keep sounding.
- *
- * For [Intensity.RED] the alarm loops indefinitely and deliberately ignores audio-focus
- * loss. It ends only when the user acts — "I'm Safe", "I Need Help" or "Stop alarm" —
- * never on a timer and never because the notification was swiped away.
- */
 class SirenAlarmService : Service() {
 
     companion object {
@@ -55,25 +44,12 @@ class SirenAlarmService : Service() {
         const val EXTRA_TIMEOUT_MS = "timeoutMs"
         const val EXTRA_VIBRATE = "vibrate"
 
-        /**
-         * The key the launched Activity reads the alert id from — deliberately *not*
-         * [EXTRA_ALERT_ID], which is this service's own intent vocabulary. The value must
-         * stay equal to `AndroidPlatformServices.EXTRA_ALERT_ID`, because that is the
-         * string `MainActivity.handleIntent` looks for; the constant cannot be shared
-         * without this library depending on the app module.
-         */
         private const val EXTRA_LAUNCH_ALERT_ID = "extra_alert_id"
 
-        /** Its own channel, silent: the audio comes from MediaPlayer, so letting the
-         *  notification play a sound too would double it up. */
         private const val CHANNEL_ALARM = "siren_alarm_playback"
         private const val NOTIFICATION_ID = 4102
         private const val WATCHDOG_INTERVAL_MS = 2_000L
 
-        /**
-         * Injected by AndroidPlatformServices — this class lives in the shared library
-         * and cannot see the app module's R class or MainActivity.
-         */
         @Volatile
         var soundResId: Int = 0
 
@@ -93,21 +69,8 @@ class SirenAlarmService : Service() {
     private var timeoutRunnable: Runnable? = null
     private var shouldRun = false
 
-    /**
-     * Whether `startForeground` has actually been called on this instance.
-     *
-     * Only meaningful for `stopForeground`, which must not be called on a service that
-     * never went foreground. The five-second `startForegroundService` contract is
-     * avoided at the source instead — `AndroidPlatformServices.stopAlarm` uses
-     * `startService`, so no promise is ever made for a stop.
-     */
     private var wentForeground = false
 
-    /**
-     * The alarm must never fall silent while an event is unanswered. MediaPlayer looping
-     * can stall — an MP3's encoder padding leaves a gap at the wrap point, and the OS or
-     * another app can interrupt playback outright. This re-starts it if that happens.
-     */
     private val watchdog = object : Runnable {
         override fun run() {
             if (!shouldRun) return
@@ -138,8 +101,7 @@ class SirenAlarmService : Service() {
 
             else -> stopEverything()
         }
-        // START_NOT_STICKY: if the process is killed we do not want a stale alarm
-        // resurrecting itself with no event behind it.
+
         return START_NOT_STICKY
     }
 
@@ -150,15 +112,13 @@ class SirenAlarmService : Service() {
         val timeout = intent.getLongExtra(EXTRA_TIMEOUT_MS, 0L)
         val vibrate = intent.getBooleanExtra(EXTRA_VIBRATE, true)
 
-        // Re-issuing START for the alarm already sounding must not restart it.
         if (currentAlertId == alertId && player?.isPlaying == true) return
 
         currentAlertId = alertId
         shouldRun = true
         ensureChannel()
         if (!startInForeground(alertId, intensity, magnitude)) {
-            // The OS refused to let us go foreground. Everything below assumes a live
-            // foreground service, and continuing would earn an ANR five seconds later.
+
             stopSelf()
             return
         }
@@ -166,9 +126,7 @@ class SirenAlarmService : Service() {
         acquireWakeLock()
         if (intensity != Intensity.GREEN) {
             wakeScreen()
-            // Order matters: the display has to be coming up before the alert is
-            // launched, or the Activity starts behind a dark screen and the user gets
-            // the alarm with nothing to look at.
+
             raiseAlertScreen(alertId)
         }
         requestFocus(intensity)
@@ -182,14 +140,12 @@ class SirenAlarmService : Service() {
 
         timeoutRunnable?.let(handler::removeCallbacks)
         if (timeout > 0L) {
-            // Yellow steps down after a while. Red never does.
+
             timeoutRunnable = Runnable { stopEverything() }.also {
                 handler.postDelayed(it, timeout)
             }
         }
     }
-
-    // ------------------------------------------------------------- playback
 
     private fun startPlayback(intensity: Intensity) {
         if (soundResId == 0) {
@@ -201,7 +157,7 @@ class SirenAlarmService : Service() {
             player = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
-                        // USAGE_ALARM is what lets this play through silent mode and DND.
+
                         .setUsage(AudioAttributes.USAGE_ALARM)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build()
@@ -227,8 +183,7 @@ class SirenAlarmService : Service() {
             focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
                 .setAudioAttributes(attrs)
                 .setOnAudioFocusChangeListener {
-                    // Intentionally empty for Red: losing focus (a call, another app)
-                    // must not silence an earthquake alarm.
+
                     if (intensity == Intensity.GREEN) stopEverything()
                 }
                 .build()
@@ -250,7 +205,7 @@ class SirenAlarmService : Service() {
             Intensity.YELLOW -> longArrayOf(0, 400, 200, 400, 200, 400)
             Intensity.RED -> longArrayOf(0, 800, 200, 800, 200, 1200, 300)
         }
-        // repeat index 0 => loops until cancelled, for anything above Green.
+
         val repeat = if (intensity == Intensity.GREEN) -1 else 0
         runCatching { vibrator.vibrate(VibrationEffect.createWaveform(pattern, repeat)) }
     }
@@ -265,17 +220,6 @@ class SirenAlarmService : Service() {
         }
     }
 
-    /**
-     * Lights the display so the alert is actually seen, not just heard.
-     *
-     * `PARTIAL_WAKE_LOCK` above keeps the CPU alive for playback but leaves the screen
-     * off. `ACQUIRE_CAUSES_WAKEUP` is the only mechanism that still turns a dark phone's
-     * display on from a service; it is deprecated in favour of the activity flags
-     * MainActivity sets, but those only take effect once the full-screen intent has
-     * actually launched the activity — and on Android 14 that intent may be denied
-     * outright. This is the fallback for exactly that case, held for 30 seconds so it
-     * cannot flatten a battery if the event goes unanswered.
-     */
     @Suppress("DEPRECATION")
     private fun wakeScreen() {
         runCatching {
@@ -291,38 +235,12 @@ class SirenAlarmService : Service() {
         }
     }
 
-    /**
-     * Whether the OS will honour the notification's full-screen intent.
-     *
-     * Duplicated from `AndroidPlatformServices.canUseFullScreenIntent` rather than shared,
-     * because this service must answer it during `onStartCommand` on a process that a
-     * high-priority push has just woken — `Platform.services` is installed from
-     * `SirenApp.onCreate` and is reliably present, but reaching back through the shared
-     * facade for one system query the service can make directly buys nothing and adds a
-     * start-order dependency to the one code path that must not have any.
-     */
     private fun fullScreenIntentAllowed(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
         val manager = getSystemService(NotificationManager::class.java) ?: return false
         return runCatching { manager.canUseFullScreenIntent() }.getOrDefault(false)
     }
 
-    /**
-     * Puts the alert on screen when the full-screen intent will not.
-     *
-     * Android 14 denies `USE_FULL_SCREEN_INTENT` to anything that is not a calling or
-     * alarm app, and the failure is silent: the notification is simply drawn as a heads-up
-     * banner instead. That is the state a Red alert was reaching in practice — a looping
-     * alarm behind a notification the user has to find and expand.
-     *
-     * Starting the Activity from here is normally blocked too (background activity starts
-     * have been forbidden since Android 10), so it is attempted only with the
-     * `SYSTEM_ALERT_WINDOW` grant that exempts it. With neither grant the notification
-     * actions remain the fallback, which is why they are not going anywhere.
-     *
-     * No-op when the intent *is* allowed: letting both fire would race the notification's
-     * own launch and could start the Activity twice.
-     */
     private fun raiseAlertScreen(alertId: String) {
         val target = activityClass ?: return
         if (fullScreenIntentAllowed()) return
@@ -343,8 +261,6 @@ class SirenAlarmService : Service() {
         }.onFailure { Log.e(TAG, "Direct alert launch refused", it) }
     }
 
-    // -------------------------------------------------------- notification
-
     private fun ensureChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = getSystemService(NotificationManager::class.java) ?: return
@@ -356,7 +272,7 @@ class SirenAlarmService : Service() {
             description = "The alarm that sounds until you confirm your safety status"
             setBypassDnd(true)
             lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
-            // Silent + no vibration: this service drives both itself.
+
             setSound(null, null)
             enableVibration(false)
         }
@@ -373,7 +289,6 @@ class SirenAlarmService : Service() {
         )
     }
 
-    /** @return false when the OS refused the foreground start, so the caller can bail. */
     private fun startInForeground(alertId: String, intensity: Intensity, magnitude: Double): Boolean {
         val open = activityClass?.let {
             PendingIntent.getActivity(
@@ -393,34 +308,23 @@ class SirenAlarmService : Service() {
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setPriority(NotificationCompat.PRIORITY_MAX)
-            // Ongoing + not auto-cancel: swiping must not silence the alarm.
+
             .setOngoing(true)
             .setAutoCancel(false)
             .setSilent(true)
-            // These actions are the required fallback when the full-screen intent is
-            // denied (Android 14+ restricts USE_FULL_SCREEN_INTENT). Without them a
-            // user could be left with a looping alarm and no visible way to stop it.
+
             .addAction(0, "I'm safe", command(ACTION_SAFE))
             .addAction(0, "I need help", command(ACTION_HELP))
             .addAction(0, "Stop alarm", command(ACTION_STOP))
 
         open?.let {
             builder.setContentIntent(it)
-            // Yellow gets the full-screen intent too. The intensity table has always
-            // specified a full-screen alert for it, but it only ever appeared when the app
-            // happened to be open already — a Yellow arriving on a locked phone was a
-            // notification and nothing more, which is not what the table says.
+
             if (intensity != Intensity.GREEN) builder.setFullScreenIntent(it, true)
         }
 
         val notification = builder.build()
 
-        // Android 12+ throws ForegroundServiceStartNotAllowedException when a service is
-        // started from the background outside an exemption. The Firestore listener path
-        // can hit that — the push path is exempt because it arrives on a high-priority
-        // FCM message. Letting it propagate would crash the process during an
-        // earthquake, so it is caught, and a plain heads-up notification is posted
-        // instead: no looping audio, but the user is still told.
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(
@@ -441,8 +345,6 @@ class SirenAlarmService : Service() {
             false
         }
     }
-
-    // ----------------------------------------------------------- teardown
 
     private fun stopEverything() {
         shouldRun = false
@@ -479,22 +381,16 @@ class SirenAlarmService : Service() {
         currentAlertId = null
         Platform.setAlarmActive(false)
 
-        // Only tear down the foreground state we actually established. A stop can arrive
-        // at an instance that never played anything — "I'm Safe" on a Green alert, or on
-        // an event reopened from history — and calling stopForeground on a service that
-        // never went foreground is pointless noise.
         if (wentForeground) {
             stopForeground(STOP_FOREGROUND_REMOVE)
             wentForeground = false
         } else {
-            // No foreground notification of ours to remove, but the alarm notification
-            // may still be sitting in the shade from a previous instance.
+
             runCatching { NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID) }
         }
         stopSelf()
     }
 
-    /** Belt and braces: every exit path must release the wake lock and audio focus. */
     override fun onDestroy() {
         stopEverything()
         super.onDestroy()

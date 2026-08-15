@@ -61,18 +61,6 @@ import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.Safe
 import com.siren.mobile.ui.theme.Space
 
-/**
- * Prototype screen 08 — the full-screen alert. Background, badge and haptic pattern all
- * escalate with the measured peak ground acceleration.
- *
- * **Every action lives on this screen, not one navigation step away.** When a full-screen
- * intent raises this on a locked phone it is the only thing the user can see, and the
- * alarm is already sounding — so "I'm safe" and "I need help" have to be answerable right
- * here. Routing them through a second screen meant that on the phones where the
- * full-screen intent is denied, the notification's actions were the *only* place those
- * two answers existed. [onConfirmStatus] still opens the detailed safety screen for the
- * response timestamp and the locked-answer state, but nothing essential is behind it.
- */
 @Composable
 fun AlertScreen(
     alert: AlertRecord,
@@ -90,8 +78,6 @@ fun AlertScreen(
         label = "pulse",
     )
 
-    // Sound and vibration are driven by the alarm service, not by this screen — the
-    // alarm has to keep running when this composable is not on screen at all.
     val alarmActive by Platform.alarmActive.collectAsState()
 
     val time = remember(alert.detectedAt) { DateFmt.clockSeconds(alert.detectedAt) }
@@ -109,7 +95,7 @@ fun AlertScreen(
             horizontalArrangement = Arrangement.spacedBy(Space.s),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // A simulated event must never be mistakable for a real earthquake.
+
             if (alert.source == AlertSource.SIMULATED) {
                 Pill("DEMO — NOT A REAL EVENT", intensityColor(alert.intensity), Color.White)
             }
@@ -133,9 +119,6 @@ fun AlertScreen(
             }
         }
 
-        // Scrolls because the action buttons below are fixed-height and take their space
-        // first: on a short screen this block is what gets squeezed, and silently cropping
-        // the intensity readout is the one thing this screen exists to show.
         Box(
             Modifier.weight(1f).verticalScroll(rememberScrollState()),
             contentAlignment = Alignment.Center,
@@ -191,10 +174,7 @@ fun AlertScreen(
                         color = Color.White,
                         style = MaterialTheme.typography.titleMedium,
                     )
-                    // The measured peak ground acceleration, deliberately small and
-                    // below the intensity. The intensity is what a student acts on; the
-                    // g figure is the precise reading behind it, and belongs to whoever
-                    // is reading the numbers rather than taking cover.
+
                     Text(
                         alert.magnitudeG.asGSpaced(3),
                         color = Color.White.copy(alpha = 0.85f),
@@ -232,10 +212,7 @@ fun AlertScreen(
         }
 
         if (myResponse == null) {
-            // Both answers are white-on-colour so they read against the intensity
-            // gradient; the label colour is what separates them. Responding silences the
-            // alarm as a side effect of the answer being recorded, which is the
-            // behaviour the notification actions already had.
+
             PrimaryButton(
                 text = "Yes, I'm safe",
                 onClick = {
@@ -281,8 +258,7 @@ fun AlertScreen(
                     fontWeight = FontWeight.SemiBold,
                 )
             }
-            // The answer is locked so the roll call stays accurate, but escalating from
-            // safe to needing help must never be closed off — the situation changes.
+
             if (myResponse.status == ResponseStatus.SAFE) {
                 PrimaryButton(
                     text = "I need help after all",
@@ -297,11 +273,6 @@ fun AlertScreen(
             }
         }
 
-        // There must ALWAYS be a visible way out of a looping alarm. Silencing is
-        // deliberately separate from responding: it quiets the sound but leaves the
-        // safety confirmation outstanding. It reads as a two-state control rather than a
-        // one-shot button so that "already silent" is distinguishable from "not silenced
-        // yet" — on a screen this loud, a button that vanishes when tapped looks broken.
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(Space.s, Alignment.CenterHorizontally),

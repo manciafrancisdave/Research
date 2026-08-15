@@ -37,25 +37,10 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-/**
- * Single source of truth for auth, Firestore data and local settings — shared by the
- * Android and iOS apps through the GitLive Firebase Multiplatform SDK.
- *
- * Firestore's on-device cache is enabled by default on both platforms, which is what
- * gives us offline queueing: a safety confirmation written with no connectivity is
- * persisted locally and replayed automatically once back online.
- */
 object SirenRepository {
 
     private const val ALERT_LIMIT = 100
 
-    /**
-     * Every listener and write runs on this scope. The handler is not decoration: a
-     * `launch` that throws with no handler reaches the thread's default uncaught
-     * handler, which on Android kills the process. A Firestore permission change or a
-     * missing `google-services.json` would then present as the app crashing on launch
-     * rather than as one broken flow, so failures are reported and swallowed here.
-     */
     private val errors = CoroutineExceptionHandler { _, e ->
         notifyUi(e.message?.takeIf { it.isNotBlank() } ?: "Something went wrong syncing.", isError = true)
     }
@@ -69,20 +54,15 @@ object SirenRepository {
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
-    // ---------------------------------------------------------------- state
-
     private val _user = MutableStateFlow<UserProfile?>(null)
     val user: StateFlow<UserProfile?> = _user.asStateFlow()
 
-    /** Distinguishes "signed out" from "signed in, profile still loading". */
     private val _signedIn = MutableStateFlow(false)
     val signedIn: StateFlow<Boolean> = _signedIn.asStateFlow()
 
     private val _alerts = MutableStateFlow<List<AlertRecord>>(emptyList())
     val alerts: StateFlow<List<AlertRecord>> = _alerts.asStateFlow()
 
-    /** False until the first alerts snapshot lands, so screens can show skeletons
-     *  instead of flashing an "empty" state at a user who is simply still loading. */
     private val _alertsLoaded = MutableStateFlow(false)
     val alertsLoaded: StateFlow<Boolean> = _alertsLoaded.asStateFlow()
 
@@ -92,25 +72,12 @@ object SirenRepository {
     private val _roster = MutableStateFlow<List<LinkedPerson>>(emptyList())
     val roster: StateFlow<List<LinkedPerson>> = _roster.asStateFlow()
 
-    /**
-     * Guardian links seen from the student's side.
-     *
-     * A student needs to know who is following their safety status — an unexplained
-     * adult watching a child's whereabouts-during-an-emergency feed is exactly the thing
-     * the confirmation step exists to prevent — and during an event they want to know
-     * their parent is safe too, which is why these rows carry a [ResponseStatus].
-     */
     private val _guardians = MutableStateFlow<List<LinkedPerson>>(emptyList())
     val guardians: StateFlow<List<LinkedPerson>> = _guardians.asStateFlow()
 
-    /**
-     * Guardian link requests touching the signed-in user: the ones raised *about* them
-     * if they are a student, the ones they raised themselves if they are a parent.
-     */
     private val _linkRequests = MutableStateFlow<List<LinkRequest>>(emptyList())
     val linkRequests: StateFlow<List<LinkRequest>> = _linkRequests.asStateFlow()
 
-    /** True while a link, role change or profile save is in flight. */
     private val _working = MutableStateFlow(false)
     val working: StateFlow<Boolean> = _working.asStateFlow()
 
@@ -135,8 +102,6 @@ object SirenRepository {
     private val _events = MutableSharedFlow<UiMessage>(extraBufferCapacity = 8)
     val events: SharedFlow<UiMessage> = _events.asSharedFlow()
 
-    // ------------------------------------------------------- internal state
-
     private var rosterMembers: List<UserProfile> = emptyList()
     private var rosterResponses: List<SafetyResponse> = emptyList()
 
@@ -152,17 +117,13 @@ object SirenRepository {
     private var alertsInitialised = false
     private var lastIncomingId: String? = null
 
-    /** Called once at start-up, after Platform.install(). */
     fun start() {
-        // Settings are local-only and must load even if Firebase never comes up, so
-        // they are read before anything touches the network.
+
         loadSettings()
         runCatching { Platform.services.subscribeToAlertsTopic() }
 
         scope.launch {
-            // Firebase.auth throws outright when google-services.json is missing or the
-            // project is misconfigured. Resolving auth anyway leaves the user on the
-            // login screen with an error instead of stuck behind the splash forever.
+
             try {
                 auth.authStateChanged.collect { firebaseUser ->
                     val uid = firebaseUser?.uid
@@ -183,8 +144,6 @@ object SirenRepository {
         }
     }
 
-    // ------------------------------------------------------------ auth API
-
     suspend fun signIn(email: String, password: String): Boolean {
         _authLoading.value = true
         _authError.value = null
@@ -200,10 +159,6 @@ object SirenRepository {
         }
     }
 
-    /**
-     * Creates the account and writes the profile. The role is chosen before the account
-     * exists (prototype screen 03) and is passed straight through to the user document.
-     */
     suspend fun signUp(name: String, email: String, password: String, role: Role): Boolean {
         _authLoading.value = true
         _authError.value = null
@@ -221,18 +176,6 @@ object SirenRepository {
         }
     }
 
-    // ------------------------------------------------------ phone sign-up
-
-    /**
-     * Sends the SMS verification code.
-     *
-     * Phone auth is not wrapped by the GitLive multiplatform SDK, so it goes through
-     * [Platform.services] — the same seam Cloud Messaging already uses. It also needs
-     * three things done in the Firebase console before a single message will send:
-     * the **Blaze** plan, the app's **SHA-256** fingerprint registered, and **Phone**
-     * enabled under Authentication → Sign-in method. Until then this returns a failure
-     * rather than pretending to have sent anything.
-     */
     suspend fun sendPhoneCode(phone: String): PhoneCodeRequest {
         _authLoading.value = true
         _authError.value = null
@@ -245,14 +188,6 @@ object SirenRepository {
         }
     }
 
-    /**
-     * Confirms the SMS code and, for a brand-new account, writes the profile.
-     *
-     * The same call covers sign-up and sign-in: Firebase gives back an existing uid if
-     * that number has been used before, so the profile is only written when there is no
-     * user document yet. Overwriting would wipe a returning student's `shortCode` and
-     * silently break every parent link pointing at it.
-     */
     suspend fun verifyPhoneCode(
         verification: PhoneVerification,
         code: String,
@@ -291,14 +226,6 @@ object SirenRepository {
         }
     }
 
-    /**
-     * Finishes a sign-up that Google Play validated without an SMS.
-     *
-     * Android can verify some SIMs instantly, which signs the user in before they are
-     * ever shown a code field. The account exists at that point but the profile document
-     * does not, and without one the app sits forever on the "profile still loading"
-     * spinner.
-     */
     suspend fun completeAutoVerifiedPhone(uid: String, phone: String, name: String, role: Role) {
         runCatching {
             val existing = usersCol.document(uid).get()
@@ -307,12 +234,11 @@ object SirenRepository {
         }.onFailure { _authError.value = authMessage(it as? Exception ?: Exception(it)) }
     }
 
-    /** Trims spaces and dashes; leaves the caller's country prefix alone. */
     private fun normalisePhone(raw: String): String {
         val cleaned = raw.filter { it.isDigit() || it == '+' }
         return when {
             cleaned.startsWith("+") -> cleaned
-            // Local Philippine mobile format, the only one this school will type.
+
             cleaned.startsWith("09") && cleaned.length >= 11 -> "+63" + cleaned.drop(1)
             cleaned.startsWith("63") -> "+$cleaned"
             else -> cleaned
@@ -332,13 +258,12 @@ object SirenRepository {
                 email = email,
                 phone = phone,
                 role = role.wire,
-                // Only students carry a linking code for parents to enter.
+
                 shortCode = if (role == Role.STUDENT) newShortCode() else "",
             )
         )
     }
 
-    /** Flips the app from "first run" to "returning user", so it opens on Login. */
     private fun markHasAccount() {
         if (!_settings.value.hasAccount) updateSettings { it.copy(hasAccount = true) }
     }
@@ -354,8 +279,7 @@ object SirenRepository {
 
     fun signOut() {
         scope.launch {
-            // detachAll now empties the per-user flows as well, so signing out and
-            // switching accounts clear the same way.
+
             detachAll()
             runCatching { auth.signOut() }
             _signedIn.value = false
@@ -399,8 +323,6 @@ object SirenRepository {
             }
         }
     }
-
-    // ----------------------------------------------------------- listeners
 
     private fun attachFor(uid: String) {
         detachAll()
@@ -454,7 +376,6 @@ object SirenRepository {
                     _alerts.value = list
                     _alertsLoaded.value = true
 
-                    // Don't replay the whole backlog as "new" on first attach.
                     val newest = list.firstOrNull()
                     if (!alertsInitialised) {
                         alertsInitialised = true
@@ -462,17 +383,11 @@ object SirenRepository {
                     } else if (newest != null && newest.id != lastIncomingId) {
                         lastIncomingId = newest.id
                         if (!newest.closed) {
-                            // Green is informational only — a notification and one
-                            // buzz, no full-screen takeover, no safety response owed.
-                            // `startAlarm` already draws that line in the platform
-                            // layer; this gate has to match it, or a Green event
-                            // hijacks the whole screen for something nobody needs to
-                            // act on. Yellow and Red still take over, as intended.
+
                             if (newest.intensity != Intensity.GREEN) {
                                 _incomingAlert.value = newest
                             }
-                            // Foreground path. The push path starts the alarm from
-                            // SirenMessagingService instead.
+
                             Platform.services.startAlarm(
                                 newest.id,
                                 newest.intensity,
@@ -505,7 +420,6 @@ object SirenRepository {
         }
     }
 
-    /** Teachers watch their class; parents watch their linked children. */
     private fun attachRosterMembers(profile: UserProfile) {
         rosterMembersJob?.cancel()
         rosterMembersJob = null
@@ -548,8 +462,7 @@ object SirenRepository {
                     recomputeRoster()
                     return
                 }
-                // One document flow per child, combined — avoids needing a whereIn
-                // query on document ids (and the composite index that implies).
+
                 rosterMembersJob = scope.launch {
                     combine(ids.map { id -> usersCol.document(id).snapshots }) { snaps ->
                         snaps.mapIndexedNotNull { i, snap ->
@@ -581,18 +494,8 @@ object SirenRepository {
         }
     }
 
-    /**
-     * Guardian link requests, watched from whichever end the signed-in user is on.
-     *
-     * One equality filter each way, deliberately: `studentId ==` for a student and
-     * `parentId ==` for a parent. Adding a second filter for `status` would be the
-     * obvious thing to do and would drag a composite index in behind it, so status is
-     * filtered client-side instead — these lists are a handful of documents at most.
-     */
     private fun attachLinkRequests(profile: UserProfile) {
-        // The profile snapshot fires on every field change; only re-subscribe when the
-        // side of the relationship actually changed, or a role switch would rebuild the
-        // listener on every keystroke of a name edit.
+
         if (currentLinkRole == profile.role && linkRequestJob != null) return
         currentLinkRole = profile.role
         linkRequestJob?.cancel()
@@ -601,7 +504,7 @@ object SirenRepository {
         val field = when (profile.role) {
             Role.STUDENT -> "studentId"
             Role.PARENT -> "parentId"
-            // Advisers add students to their class directly; they raise no requests.
+
             Role.TEACHER -> {
                 _linkRequests.value = emptyList()
                 recomputeGuardians()
@@ -639,13 +542,6 @@ object SirenRepository {
         }
     }
 
-    /**
-     * Mirrors approved requests into the parent's own `linkedStudentIds`.
-     *
-     * The student is the one who approves, but Firestore only lets each user write their
-     * own document, so the parent's client is what actually commits the link once it
-     * sees the approval. A decline (or a later revocation) removes it again.
-     */
     private suspend fun adoptApprovedLinks(requests: List<LinkRequest>) {
         val uid = auth.currentUser?.uid ?: return
         val current = _user.value?.linkedStudentIds.orEmpty().toSet()
@@ -658,10 +554,6 @@ object SirenRepository {
             .onFailure { notifyUi("Couldn't update your linked students: ${it.message}", true) }
     }
 
-    /**
-     * The student's view of who is following them, carrying each guardian's own safety
-     * status for the event currently being tracked.
-     */
     private fun recomputeGuardians() {
         val profile = _user.value
         if (profile == null || profile.role != Role.STUDENT) {
@@ -684,7 +576,6 @@ object SirenRepository {
             .sortedBy { it.name }
     }
 
-    /** Responses for the alert currently being tracked on the live dashboard. */
     private fun ensureRosterListener(alertId: String) {
         if (currentRosterAlertId == alertId && rosterRespJob != null) return
         currentRosterAlertId = alertId
@@ -706,14 +597,12 @@ object SirenRepository {
                         }.getOrNull()
                     }
                     recomputeRoster()
-                    // Guardians read their status out of the same snapshot, which is how
-                    // a student sees "Mum confirmed safe" during an event.
+
                     recomputeGuardians()
                 }
         }
     }
 
-    /** Needs-help first, then no-reply, then safe — the order the dashboard requires. */
     private fun recomputeRoster() {
         val byUid = rosterResponses.associateBy { it.userId }
         _roster.value = rosterMembers
@@ -742,15 +631,6 @@ object SirenRepository {
             )
     }
 
-    /**
-     * Cancels every listener **and empties the state they fed**.
-     *
-     * The emptying is not optional. `attachFor` calls this when the signed-in uid
-     * changes, so without it a second account signing in on the same phone sees the
-     * previous user's roster, their safety responses and even their live full-screen
-     * alert, until each listener happens to deliver its first snapshot. On a shared
-     * school handset that is one student's status shown under another's name.
-     */
     private fun detachAll() {
         profileJob?.cancel(); profileJob = null
         alertsJob?.cancel(); alertsJob = null
@@ -778,17 +658,6 @@ object SirenRepository {
         notifyUi("Couldn't sync $what. Check your connection.", isError = true)
     }
 
-    // -------------------------------------------------------------- writes
-
-    /**
-     * Changes the signed-in user's role.
-     *
-     * This reverses the v2.x decision to freeze the role at sign-up: the app told users
-     * their role could be changed later and Settings had nowhere to do it, so the
-     * promise was simply broken. Switching *to* Student mints a linking code if the
-     * account has never had one — without it a student is invisible to parents and to
-     * their adviser, and the roster silently stays empty.
-     */
     suspend fun updateRole(role: Role): Boolean {
         val uid = auth.currentUser?.uid ?: return false
         val current = _user.value
@@ -810,10 +679,6 @@ object SirenRepository {
         }
     }
 
-    /**
-     * Corrects the profile — a misspelt name at sign-up used to be permanent, and a
-     * misspelt name is what a teacher reads off the roll call during an evacuation.
-     */
     suspend fun updateProfile(name: String, classId: String, phone: String): Boolean {
         val uid = auth.currentUser?.uid ?: return false
         _working.value = true
@@ -833,17 +698,6 @@ object SirenRepository {
         }
     }
 
-    /**
-     * Opens the photo picker and saves the result, or clears the picture when [remove].
-     *
-     * The platform layer hands back an already-downscaled base64 JPEG rather than a file
-     * path or a raw image: shared code has no way to resize or re-encode, and an
-     * unresized camera photo would be several megabytes against Firestore's 1 MiB
-     * document ceiling — the write would simply be rejected.
-     *
-     * A null return means the user backed out of the picker, which is not an error and
-     * must not clear the existing picture.
-     */
     suspend fun changeProfilePhoto(remove: Boolean = false): Boolean {
         val uid = auth.currentUser?.uid ?: return false
         _working.value = true
@@ -860,14 +714,6 @@ object SirenRepository {
         }
     }
 
-    /**
-     * A parent asks to follow a student by typing the code from the student's Settings.
-     *
-     * This raises a request rather than completing the link. The code is six characters
-     * and gets read aloud across a classroom; anyone who overhears one could otherwise
-     * attach themselves to that student's live safety feed with the student never being
-     * told. The student confirms, and only then does [adoptApprovedLinks] commit it.
-     */
     suspend fun requestLink(code: String): LinkResult {
         val uid = auth.currentUser?.uid ?: return LinkResult.Failed("You are signed out.")
         val me = _user.value ?: return LinkResult.Failed("Your profile is still loading.")
@@ -885,8 +731,6 @@ object SirenRepository {
             }
             if (outstanding != null) return LinkResult.AlreadyRequested(studentName)
 
-            // Deterministic id: re-asking after a decline overwrites the old request
-            // instead of piling up a second one the student has to dismiss twice.
             linkRequestsCol.document("${match.first}_$uid").set(
                 LinkRequestDoc(
                     studentId = match.first,
@@ -907,7 +751,6 @@ object SirenRepository {
         }
     }
 
-    /** The student's answer to "is this person really your parent or guardian?". */
     suspend fun respondToLinkRequest(requestId: String, approve: Boolean): Boolean {
         _working.value = true
         return try {
@@ -925,13 +768,6 @@ object SirenRepository {
         }
     }
 
-    /**
-     * An adviser adds a student to their class by typing the student's code.
-     *
-     * The roster is driven entirely by `classId`, and nothing in the app ever wrote one
-     * — every teacher account shipped with a blank class and therefore an empty roll
-     * call, with no way to fix it from inside the app. This is that missing half.
-     */
     suspend fun linkStudentToClass(code: String): LinkResult {
         auth.currentUser?.uid ?: return LinkResult.Failed("You are signed out.")
         val me = _user.value ?: return LinkResult.Failed("Your profile is still loading.")
@@ -955,7 +791,6 @@ object SirenRepository {
         }
     }
 
-    /** Removes a student from this adviser's class. */
     fun removeStudentFromClass(studentUid: String) {
         scope.launch {
             runCatching { usersCol.document(studentUid).update("classId" to "") }
@@ -973,10 +808,6 @@ object SirenRepository {
         }
     }
 
-    /**
-     * Drops a guardian link from the parent's side. The request document goes with it,
-     * so the student's list stops showing somebody who is no longer following them.
-     */
     fun unlinkStudent(studentUid: String) {
         val uid = auth.currentUser?.uid ?: return
         val updated = _user.value?.linkedStudentIds.orEmpty().filterNot { it == studentUid }
@@ -988,7 +819,6 @@ object SirenRepository {
         }
     }
 
-    /** Revokes a guardian from the student's side. */
     fun revokeGuardian(parentUid: String) {
         val uid = auth.currentUser?.uid ?: return
         scope.launch {
@@ -1002,15 +832,8 @@ object SirenRepository {
         }
     }
 
-    /**
-     * Demo mode. Simulated events are tagged so they stay visibly separate from real
-     * sensor readings in the history and in the paper's evaluation data.
-     */
     fun simulateAlert(intensity: Intensity) {
-        // Each value must sit inside its own band in Intensity.fromMagnitude. These
-        // moved when the bands were rebased on intensity levels — the old 0.22 / 0.48
-        // / 0.74 all land in RED under the current thresholds, which would have made
-        // every simulation fire the full alarm.
+
         val magnitude = when (intensity) {
             Intensity.GREEN -> 0.005
             Intensity.YELLOW -> 0.050
@@ -1033,7 +856,7 @@ object SirenRepository {
     }
 
     fun submitMyResponse(alertId: String, status: ResponseStatus) {
-        // Responding is one of the three things that silences the alarm.
+
         Platform.services.stopAlarm()
         val uid = auth.currentUser?.uid ?: return
         val payload = ResponseDoc(
@@ -1045,8 +868,7 @@ object SirenRepository {
         )
         scope.launch {
             runCatching {
-                // Written to the alert (for the live dashboard) and mirrored under the
-                // user (so History works without a collection-group index).
+
                 alertsCol.document(alertId).collection("responses").document(uid).set(payload)
                 usersCol.document(uid).collection("responses").document(alertId).set(payload)
             }.onFailure { notifyUi("Couldn't record your response: ${it.message}", true) }
@@ -1089,13 +911,10 @@ object SirenRepository {
         _incomingAlert.value = null
     }
 
-    // ------------------------------------------------------------ settings
-
     private fun loadSettings() {
         val raw = Platform.services.readSettingsJson()
         if (raw == null) {
-            // Fresh install — SirenSettings() already carries the official Bogo
-            // responder numbers. Persist now so the seeded flag is recorded.
+
             persistSettings(_settings.value)
             return
         }
@@ -1105,9 +924,7 @@ object SirenRepository {
             if (doc.seededDefaults) {
                 _settings.value = stored
             } else {
-                // Install that predates the official numbers: add only the ones it has
-                // never seen, then record that we have. After this a deleted default
-                // stays deleted rather than reappearing on every launch.
+
                 val known = stored.contacts.map { it.id }.toSet()
                 val merged = stored.copy(
                     contacts = DefaultEmergencyContacts.filterNot { it.id in known } + stored.contacts,
@@ -1132,7 +949,6 @@ object SirenRepository {
         persistSettings(updated)
     }
 
-    /** Re-adds any official responder number the user has removed. */
     fun restoreDefaultContacts() = updateSettings { s ->
         val known = s.contacts.map { it.id }.toSet()
         s.copy(contacts = DefaultEmergencyContacts.filterNot { it.id in known } + s.contacts)
@@ -1153,8 +969,6 @@ object SirenRepository {
     }
 }
 
-// ------------------------------------------------------------------- DTOs
-
 private fun Timestamp?.toMillis(): Long =
     this?.let { it.seconds * 1000L + it.nanoseconds / 1_000_000L }
         ?: Platform.services.nowMillis()
@@ -1163,25 +977,17 @@ private fun Timestamp?.toMillis(): Long =
 internal data class UserDoc(
     val name: String = "",
     val email: String = "",
-    /** Empty for email accounts; E.164 for phone sign-ups. */
+
     val phone: String = "",
     val role: String = "student",
     val classId: String = "",
     val schoolId: String = "",
     val shortCode: String = "",
     val linkedStudentIds: List<String> = emptyList(),
-    /** Base64 JPEG profile picture; see UserProfile.photo for why it lives here. */
+
     val photo: String = "",
 )
 
-/**
- * A guardian link awaiting the student's confirmation.
- *
- * Top-level with `studentId` and `parentId` denormalised onto it so each side can watch
- * its own view with a single equality filter and no composite index. The document id is
- * always `"{studentId}_{parentId}"`, which makes the relationship unique by construction
- * — re-requesting after a decline overwrites rather than duplicating.
- */
 @Serializable
 internal data class LinkRequestDoc(
     val studentId: String = "",
@@ -1213,31 +1019,14 @@ internal data class ResponseDoc(
     val alertId: String = "",
 )
 
-/**
- * `darkMode` used to live here. It is gone with the dark scheme, and the stored JSON
- * on existing installs still carries the key — `ignoreUnknownKeys = true` on [json]
- * is what lets those settings keep loading instead of resetting and wiping the user's
- * saved emergency contacts. Do not tighten that flag.
- */
 @Serializable
 internal data class SettingsDoc(
     val criticalAlerts: Boolean = true,
     val vibration: Boolean = true,
     val contacts: List<ContactDoc> = emptyList(),
-    /**
-     * Records that the official responder numbers have been added once. Without it,
-     * a user who deliberately deletes one would get it back on the next launch.
-     */
+
     val seededDefaults: Boolean = false,
-    /**
-     * Set the first time an account is created or signed into on this device, which is
-     * what flips the opening screen from Create Account back to Login.
-     *
-     * Defaults to false, so an install that predates this field opens on Create Account
-     * once. That is the right way round: the alternative is a returning user seeing a
-     * sign-up form, which is confusing but harmless, versus a brand-new user being asked
-     * to sign in with credentials they do not have.
-     */
+
     val hasAccount: Boolean = false,
 ) {
     fun toModel() = SirenSettings(

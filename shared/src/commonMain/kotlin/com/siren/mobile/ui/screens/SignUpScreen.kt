@@ -41,18 +41,8 @@ import com.siren.mobile.ui.theme.Space
 private const val MIN_PASSWORD = 6
 private const val CODE_LENGTH = 6
 
-/** Which credential the account is being created with. */
 enum class SignUpMethod(val label: String) { EMAIL("Email"), PHONE("Phone") }
 
-/**
- * Account creation. The role picked on the previous screen is carried in and written
- * to the profile, so a user never sees the credential fields before choosing one.
- *
- * Phone sign-up is a second route to the same account, not a second kind of account:
- * either way the result is a Firebase user and a `users/{uid}` document with the chosen
- * role. It only appears when the platform can actually deliver an SMS — [phoneSupported]
- * is false on iOS, where the FirebaseAuth pod is not linked.
- */
 @Composable
 fun SignUpScreen(
     role: Role,
@@ -78,7 +68,7 @@ fun SignUpScreen(
     val mismatch = confirm.isNotEmpty() && confirm != password
     val emailValid = name.isNotBlank() && email.isNotBlank() &&
         password.length >= MIN_PASSWORD && confirm == password
-    // Shortest sane entry is a local 11-digit mobile; anything less cannot be a number.
+
     val phoneValid = name.isNotBlank() && phone.filter { it.isDigit() }.length >= 10
 
     Column(
@@ -103,8 +93,6 @@ fun SignUpScreen(
             InfoBanner(error, Icons.Filled.Warning, tone = BannerTone.Danger)
         }
 
-        // Once the SMS is out, the choice is settled — swapping method mid-verification
-        // would strand a code the user is about to receive.
         if (phoneSupported && !codeSent) {
             Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
                 SignUpMethod.entries.forEach { m ->
@@ -164,8 +152,7 @@ fun SignUpScreen(
                 leadingIcon = Icons.Filled.Smartphone,
                 keyboardType = KeyboardType.Phone,
                 supportingText = "We'll text you a 6-digit code. Standard rates apply.",
-                // The number is fixed once the code is out — editing it here while an
-                // SMS is in flight would verify against a number nobody was sent one on.
+
                 enabled = !codeSent,
             )
 

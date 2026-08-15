@@ -42,7 +42,6 @@ import com.siren.mobile.util.DateFmt
 import com.siren.mobile.util.asGSpaced
 import com.siren.mobile.util.tabular
 
-/** Prototype screen 10 — the live roll-call for an open event. */
 @Composable
 fun LiveSafetyDashboardScreen(
     alert: AlertRecord,
@@ -58,7 +57,6 @@ fun LiveSafetyDashboardScreen(
     val fraction = if (roster.isEmpty()) 0f else responded.toFloat() / roster.size
     val pct = (fraction * 100).toInt()
 
-    // Animated so a student responding is visible, not just a silent number change.
     val animated by animateFloatAsState(targetValue = fraction, animationSpec = tween(400), label = "progress")
 
     LazyColumn(

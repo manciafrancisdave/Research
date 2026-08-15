@@ -55,7 +55,6 @@ private enum class HistoryFilter(val label: String) {
     SIMULATION("Simulation"),
 }
 
-/** Prototype screen 11 — read-only record, doubling as the study's evaluation data. */
 @Composable
 fun HistoryScreen(
     alerts: List<AlertRecord>,
@@ -141,8 +140,7 @@ private fun HistoryRow(alert: AlertRecord, response: SafetyResponse?) {
     val status = SirenTheme.status
 
     ListRow(
-        // Was "Minor · Level 1", which sat next to the trailing "Intensity I–IV" and
-        // put two different numbering schemes for the same thing on one row.
+
         title = "${alert.intensity.severity} · ${alert.intensity.shaking}",
         subtitle = DateFmt.dateTime(alert.detectedAt),
         leading = {
@@ -164,9 +162,7 @@ private fun HistoryRow(alert: AlertRecord, response: SafetyResponse?) {
                     color = tint,
                     fontWeight = FontWeight.Bold,
                 )
-                // The reading behind the band, smaller and directly beneath it. These
-                // rows double as the study's evaluation data, where the exact figure
-                // matters more than anywhere else in the app.
+
                 Text(
                     alert.magnitudeG.asGSpaced(3),
                     style = MaterialTheme.typography.labelSmall.tabular(),

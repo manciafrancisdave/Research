@@ -70,7 +70,6 @@ private enum class RosterFilter(val label: String) {
     NO_REPLY("No reply"),
 }
 
-/** Prototype screen 06 — the adviser's live class overview. */
 @Composable
 fun TeacherDashboardScreen(
     user: UserProfile,
@@ -131,7 +130,6 @@ fun TeacherDashboardScreen(
 
         if (!online) item { OfflineBanner() }
 
-        // A live event outranks everything else on this screen.
         if (activeAlert != null && !activeAlert.closed) {
             item {
                 Column(
@@ -174,13 +172,10 @@ fun TeacherDashboardScreen(
             }
         }
 
-        // Only meaningful once there is a class to describe.
         if (roster.isNotEmpty()) {
             item { RosterBreakdown(safe = safe, needsHelp = help, noReply = noReply) }
         }
 
-        // The roster is keyed entirely on classId, so an adviser with no class set can
-        // never have a student. This is the first thing to fix, ahead of the code field.
         if (user.classId.isBlank()) {
             item {
                 InfoBanner(
@@ -233,9 +228,7 @@ fun TeacherDashboardScreen(
         }
 
         item {
-            // Scrolls rather than wraps — with counts appended these used to break
-            // onto three lines inside a single chip. The counts now live in the
-            // status block above, so they are not duplicated here either.
+
             Row(
                 Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(Space.s),

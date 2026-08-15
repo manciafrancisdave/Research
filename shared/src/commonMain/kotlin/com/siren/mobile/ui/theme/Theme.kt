@@ -12,17 +12,6 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-/**
- * Status colours are not part of Material's scheme, so they ride along in their own
- * CompositionLocal. Screens read `SirenTheme.status.danger` instead of importing raw
- * palette values, which keeps every status colour in one place.
- *
- * The app is deliberately **light-only**. A dark scheme used to ship alongside this
- * one, but several screens — the login screen worst of all — dropped to unreadable
- * contrast under it, and an emergency app that cannot be read is worse than one that
- * ignores the system theme. Do not reintroduce a dark scheme without contrast-checking
- * every screen against WCAG AA (4.5:1 for body text, 3:1 for large text and icons).
- */
 @Immutable
 data class StatusColors(
     val safe: Color,
@@ -34,14 +23,11 @@ data class StatusColors(
     val danger: Color,
     val dangerContainer: Color,
     val onDangerContainer: Color,
-    /** Saturated variants for icons/bars, where contrast rules are looser than text. */
+
     val safeFill: Color,
     val warnFill: Color,
     val dangerFill: Color,
-    /**
-     * The "sensor console" panel at the top of each dashboard. A solid deep surface
-     * rather than a gradient, so gradients stay reserved for seismic intensity.
-     */
+
     val hero: Color,
     val onHero: Color,
     val onHeroMuted: Color,
@@ -91,7 +77,6 @@ private val LightColors = lightColorScheme(
     scrim = Color(0x99000000),
 )
 
-/** One radius scale. Screens must not invent their own corner values. */
 private val SirenShapes = Shapes(
     extraSmall = RoundedCornerShape(6.dp),
     small = RoundedCornerShape(10.dp),
@@ -100,7 +85,6 @@ private val SirenShapes = Shapes(
     extraLarge = RoundedCornerShape(28.dp),
 )
 
-/** Corner radii and fixed sizes, on a 4dp grid. */
 object Layout {
     val card = 16.dp
     val cardLarge = 22.dp
@@ -111,12 +95,11 @@ object Layout {
     val buttonHeight = 52.dp
     val screenPadding = 20.dp
     val rowMinHeight = 56.dp
-    /** Android/iOS minimum accessible touch target. */
+
     val touchTarget = 48.dp
     val hairline = 1.dp
 }
 
-/** 4dp base grid. Every gap in the app comes from here. */
 object Space {
     val xxs = 2.dp
     val xs = 4.dp
@@ -128,10 +111,6 @@ object Space {
     val xxxl = 40.dp
 }
 
-/**
- * Light-only by design — the system's dark setting is deliberately ignored, so the
- * app looks and reads identically on every phone regardless of how it is configured.
- */
 @Composable
 fun SirenTheme(content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalStatusColors provides LightStatus) {

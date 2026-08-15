@@ -3,8 +3,6 @@ import FirebaseCore
 import FirebaseMessaging
 import UserNotifications
 
-// Firebase MUST be configured before Compose starts, because MainViewController()
-// immediately builds SirenRepository, which touches Firebase.auth / Firebase.firestore.
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate, MessagingDelegate {
 
     func application(
@@ -17,8 +15,6 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         Messaging.messaging().delegate = self
         application.registerForRemoteNotifications()
 
-        // The Kotlin side subscribes to "alerts" too, but that call is a no-op on iOS
-        // until this pod is linked — see IosPlatformServices.subscribeToAlertsTopic.
         Messaging.messaging().subscribe(toTopic: "alerts")
 
         return true
@@ -31,7 +27,6 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         Messaging.messaging().apnsToken = deviceToken
     }
 
-    // Show the alert even when the app is in the foreground.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,

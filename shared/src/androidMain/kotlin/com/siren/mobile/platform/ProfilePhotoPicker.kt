@@ -10,27 +10,11 @@ import java.io.ByteArrayOutputStream
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-/**
- * Implemented by the host Activity.
- *
- * `registerForActivityResult` has to be called before the Activity finishes being
- * created, so the launcher cannot live in [AndroidPlatformServices] — which only holds
- * an application context anyway. The Activity owns the launcher and exposes it through
- * this interface; `AndroidPlatformServices` finds it via the current-activity lambda.
- */
 interface ProfilePhotoPicker {
-    /** Base64 JPEG, already downscaled, or null if the user backed out. */
+
     suspend fun pickProfilePhoto(): String?
 }
 
-/**
- * Turns a picked image into something small enough to live in a Firestore document.
- *
- * Two stages, and both matter. `inSampleSize` decodes at a reduced size so a 12-megapixel
- * camera photo never becomes a full-size Bitmap in memory — decoding one at full
- * resolution just to shrink it is a routine OutOfMemoryError on a cheap phone. The exact
- * scale afterwards then hits [PROFILE_PHOTO_MAX_PX] precisely.
- */
 object ProfilePhotoEncoder {
 
     private const val TAG = "ProfilePhoto"
@@ -62,7 +46,6 @@ object ProfilePhotoEncoder {
         Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
     }.onFailure { Log.e(TAG, "Failed to encode profile photo", it) }.getOrNull()
 
-    /** Largest power-of-two downsample that still leaves us above the target size. */
     private fun sampleSizeFor(width: Int, height: Int): Int {
         var sample = 1
         var longest = max(width, height)

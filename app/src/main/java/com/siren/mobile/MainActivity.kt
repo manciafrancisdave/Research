@@ -34,23 +34,14 @@ class MainActivity : ComponentActivity(), ProfilePhotoPicker {
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
-    /** Non-null only while the photo picker is open. */
     private var pendingPhoto: CancellableContinuation<String?>? = null
 
-    /**
-     * The system photo picker.
-     *
-     * `PickVisualMedia` needs no storage permission at all — the user chooses one image
-     * and the app receives only that. Asking for READ_MEDIA_IMAGES to set an avatar
-     * would be asking to read the entire gallery.
-     */
     private val pickPhoto =
         registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
             val waiting = pendingPhoto
             pendingPhoto = null
             if (waiting == null || !waiting.isActive) return@registerForActivityResult
-            // Decoding and downscaling happen off the main thread: the encoder reads and
-            // re-compresses a photo that can be several megapixels.
+
             lifecycleScope.launch {
                 val encoded = uri?.let {
                     withContext(Dispatchers.IO) { ProfilePhotoEncoder.encode(this@MainActivity, it) }
@@ -60,8 +51,7 @@ class MainActivity : ComponentActivity(), ProfilePhotoPicker {
         }
 
     override suspend fun pickProfilePhoto(): String? = suspendCancellableCoroutine { cont ->
-        // Only one picker at a time; a second request cancels the first rather than
-        // leaving a continuation that nothing will ever resume.
+
         pendingPhoto?.takeIf { it.isActive }?.resume(null)
         pendingPhoto = cont
         cont.invokeOnCancellation { pendingPhoto = null }
@@ -80,7 +70,6 @@ class MainActivity : ComponentActivity(), ProfilePhotoPicker {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Hold the system splash until Firebase has told us whether we're signed in.
         splash.setKeepOnScreenCondition { !SirenRepository.authResolved.value }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -98,26 +87,12 @@ class MainActivity : ComponentActivity(), ProfilePhotoPicker {
         handleIntent(intent)
     }
 
-    /** Tapping the notification — or a full-screen intent firing — lands here. */
     private fun handleIntent(intent: Intent?) {
         val alertId = intent?.getStringExtra(EXTRA_ALERT_ID) ?: return
         showOverLockScreen()
         SirenRepository.showAlertById(alertId)
     }
 
-    /**
-     * Brings the alert into view on a locked, dark phone.
-     *
-     * The full-screen intent launches this activity, but on a locked device that alone
-     * puts it *behind* the keyguard with the screen still off — the alarm sounds and the
-     * user sees nothing. These three calls are what turn the display on, draw above the
-     * lock screen, and keep it lit while the alert is up.
-     *
-     * The keyguard is only asked to dismiss if it is not secured: `requestDismissKeyguard`
-     * on a PIN-protected phone prompts for the PIN, which is precisely the wrong thing to
-     * put between somebody and an earthquake warning. Showing over the lock screen is
-     * enough, and the "I'm safe" / "I need help" actions work from there.
-     */
     private fun showOverLockScreen() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)

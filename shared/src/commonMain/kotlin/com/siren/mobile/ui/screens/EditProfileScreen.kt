@@ -39,17 +39,6 @@ import com.siren.mobile.ui.components.SirenField
 import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.Space
 
-/**
- * Correcting the account details.
- *
- * A name typed wrong at sign-up used to be permanent, and that name is what an adviser
- * reads off the roll call during an evacuation and what a parent looks for in their
- * linked-children list — so it has to be fixable.
- *
- * Class is editable for advisers because the roster is keyed entirely on `classId`, and
- * nothing in the app ever set one: every teacher account shipped with a blank class and
- * therefore a permanently empty roll call.
- */
 @Composable
 fun EditProfileScreen(
     user: UserProfile,
@@ -146,8 +135,6 @@ fun EditProfileScreen(
             supportingText = "Optional. Used so the school can reach you during an event.",
         )
 
-        // Changing the sign-in email would re-authenticate the Firebase account and
-        // invalidate the session mid-emergency, so it is shown but not editable.
         if (user.email.isNotBlank()) {
             SirenField(
                 value = user.email,

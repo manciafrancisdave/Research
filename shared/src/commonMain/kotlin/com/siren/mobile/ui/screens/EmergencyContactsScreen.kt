@@ -49,13 +49,6 @@ import com.siren.mobile.ui.theme.SirenTheme
 import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.util.initials
 
-/**
- * Prototype screen 13. A quick-call list: one tap hands the number to the phone's own
- * dialer or SMS composer, so it still works when the app has no data connection.
- *
- * It does NOT send anything by itself. There is no automated SMS anywhere in this
- * system — the node is Wi-Fi only and carries no GSM hardware.
- */
 @Composable
 fun EmergencyContactsScreen(
     contacts: List<EmergencyContact>,
@@ -94,18 +87,12 @@ fun EmergencyContactsScreen(
 
         item {
             InfoBanner(
-                // Was "SMS fallback is active — these contacts are still reached when
-                // there is no internet." That was false: nothing in the app or the
-                // node sends SMS, and no GSM hardware exists to send one. Telling
-                // someone help is already on its way when it is not is the worst
-                // possible failure mode for this screen.
+
                 "Tap a contact to call or text them yourself. Your phone dials directly, so these numbers work even with no internet.",
                 Icons.Filled.Sms,
             )
         }
 
-        // Only offered when something is actually missing, so it is not permanent
-        // clutter for the majority who never delete one.
         if (missingOfficial.isNotEmpty()) {
             item {
                 SecondaryButton(

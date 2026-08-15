@@ -46,15 +46,6 @@ import com.siren.mobile.ui.theme.SirenTheme
 import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.util.DateFmt
 
-/**
- * Prototype screen 04. The registrar issues each student a 6-character code, which the
- * parent types here. (The prototype's "Scan QR" affordance needs a camera dependency and
- * is intentionally left out of this build.)
- *
- * Typing a valid code no longer links the account — it raises a request the student has
- * to confirm, so this screen has to show requests in flight as well as completed links.
- * Without that the parent types a code, nothing visibly happens, and they type it again.
- */
 @Composable
 fun ParentLinkingScreen(
     linked: List<LinkedPerson>,
@@ -80,7 +71,7 @@ fun ParentLinkingScreen(
 
         SirenField(
             value = code,
-            // Codes are issued upper-case and never contain look-alike characters.
+
             onValueChange = { code = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(6) },
             label = "Linking code",
             leadingIcon = Icons.Filled.Key,

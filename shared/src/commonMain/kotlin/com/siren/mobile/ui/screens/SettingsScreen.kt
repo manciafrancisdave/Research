@@ -61,7 +61,6 @@ import com.siren.mobile.ui.theme.SirenTheme
 import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.util.tabular
 
-/** Prototype screen 14. */
 @Composable
 fun SettingsScreen(
     user: UserProfile,
@@ -112,7 +111,6 @@ fun SettingsScreen(
             )
         }
 
-        // Students carry the code a parent needs, so it gets top-tier treatment.
         if (user.role == Role.STUDENT && user.shortCode.isNotBlank()) {
             Surface(
                 shape = RoundedCornerShape(Layout.cardLarge),
@@ -170,10 +168,6 @@ fun SettingsScreen(
             ) { v -> onUpdateSettings { it.copy(vibration = v) } }
         }
 
-        // Both of these are OS-level grants the app cannot set for itself, and both fail
-        // silently: notifications off means no alert ever arrives, and full-screen
-        // alerts denied means a Red event sounds the alarm with nothing on screen to
-        // explain it. Surfacing them here is the only way a user finds out.
         if (!notificationsAllowed) {
             InfoBanner(
                 "Notifications are switched off for S.I.R.E.N. You will not be warned of an earthquake until you turn them back on.",
@@ -314,8 +308,6 @@ fun SettingsScreen(
         )
     }
 
-    // Switching role rearranges what the account can see and do, so it gets a second,
-    // explicit confirmation naming the consequence for the role being left behind.
     pendingRole?.let { target ->
         AlertDialog(
             onDismissRequest = { pendingRole = null },
@@ -345,10 +337,6 @@ fun SettingsScreen(
     }
 }
 
-/**
- * The whole row is the target — the Switch only reflects state. Tapping a 56dp-tall
- * row is far easier under stress than hitting the switch itself.
- */
 @Composable
 private fun ToggleRow(
     icon: ImageVector,

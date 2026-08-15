@@ -1,12 +1,5 @@
 package com.siren.mobile.model
 
-/**
- * Domain model for S.I.R.E.N.
- *
- * Enum names are written to Firestore in lower case (see SirenRepository), which keeps
- * the documents readable and matches the schema the ESP32 firmware writes.
- */
-
 enum class Role(val label: String, val blurb: String) {
     STUDENT("Student", "Receive alerts and confirm your safety status."),
     TEACHER("Teacher / School Admin", "Monitor your class roster in real time."),
@@ -20,31 +13,15 @@ enum class Role(val label: String, val blurb: String) {
     }
 }
 
-/**
- * Intensity bands follow the campus ESP32 accelerometer calibration used in the study.
- *
- * [scale] and [shaking] lead every readout — "Intensity V–VI · Moderate shaking" —
- * because an intensity level is the language drills and PHIVOLCS advisories already use,
- * and it is what somebody mid-earthquake can act on. The measured peak ground
- * acceleration is shown **underneath it, in smaller type**, to three decimals: it is the
- * study's actual measurement, and hiding it entirely (as v2.6 did) left the evaluation
- * data invisible inside the app that collected it.
- *
- * The ordering is the point. Intensity first and large, `0.xxx g` second and small.
- *
- * These thresholds MUST stay in lockstep with BAND_YELLOW_G / BAND_RED_G in the ESP32
- * firmware. If one side changes and the other does not, the hardware and the phone
- * disagree about what colour an earthquake is.
- */
 enum class Intensity(
     val label: String,
     val severity: String,
     val level: Int,
-    /** Roman-numeral band shown to users, e.g. "V–VI". */
+
     val scale: String,
-    /** Plain-language descriptor paired with [scale]. */
+
     val shaking: String,
-    /** The g range behind this band. Documentation and the Demo screen only. */
+
     val range: String,
     val behaviour: String,
 ) {
@@ -66,10 +43,8 @@ enum class Intensity(
 
     val wire: String get() = name.lowercase()
 
-    /** "Intensity V–VI" — the headline readout. */
     val levelText: String get() = "Intensity $scale"
 
-    /** "Intensity V–VI · Moderate shaking" — where there is room for both. */
     val levelWithShaking: String get() = "$levelText · $shaking"
 
     companion object {
@@ -109,14 +84,6 @@ enum class AlertSource(val label: String) {
     }
 }
 
-/**
- * Where a guardian link has got to.
- *
- * A parent typing a student's code no longer links the account outright — it raises a
- * request the student has to approve. The code is six characters and gets passed around
- * a classroom; without this step anyone who saw one could start following that student's
- * live location-of-safety status, and the student would never know it had happened.
- */
 enum class LinkRequestStatus(val label: String) {
     PENDING("Awaiting confirmation"),
     APPROVED("Confirmed"),
@@ -130,13 +97,6 @@ enum class LinkRequestStatus(val label: String) {
     }
 }
 
-/**
- * One parent/guardian asking to follow one student.
- *
- * Held top-level rather than under either user so both sides can watch it with a single
- * equality filter — `parentId ==` for the parent, `studentId ==` for the student — and
- * neither query needs a composite index.
- */
 data class LinkRequest(
     val id: String,
     val studentId: String,
@@ -171,26 +131,18 @@ data class UserProfile(
     val uid: String,
     val name: String,
     val email: String = "",
-    /** Set for accounts created with phone sign-up; blank for email accounts. */
+
     val phone: String = "",
     val role: Role = Role.STUDENT,
     val classId: String = "",
     val schoolId: String = "",
-    /** Short code a parent types to link this student. Students only. */
+
     val shortCode: String = "",
     val linkedStudentIds: List<String> = emptyList(),
-    /**
-     * Profile picture as a base64 JPEG, or blank for the initials fallback.
-     *
-     * Held on the user document rather than in Firebase Storage, which needs the Blaze
-     * plan — the same billing wall that defers phone sign-up. The picker downscales to
-     * 256px at quality 80 before encoding, so a photo lands around 20 KB against
-     * Firestore's 1 MiB document ceiling, and it arrives on the profile snapshot the app
-     * already listens to instead of needing a second fetch per face.
-     */
+
     val photo: String = "",
 ) {
-    /** Whichever of email/phone the account actually has, for display. */
+
     val contact: String get() = email.ifBlank { phone }
 
     val initials: String
@@ -201,7 +153,6 @@ data class UserProfile(
             .ifEmpty { "?" }
 }
 
-/** A row in the teacher roster or the parent's linked-children list. */
 data class LinkedPerson(
     val uid: String,
     val name: String,
@@ -209,7 +160,7 @@ data class LinkedPerson(
     val status: ResponseStatus = ResponseStatus.NO_RESPONSE,
     val respondedAt: Long? = null,
     val pending: Boolean = false,
-    /** Base64 JPEG, or blank to fall back to [initials]. */
+
     val photo: String = "",
 ) {
     val initials: String
@@ -228,13 +179,6 @@ data class EmergencyContact(
     val primary: Boolean = false,
 )
 
-/**
- * Official City of Bogo responders, seeded for every user on first run so a student
- * has someone to call before they have added anyone themselves.
- *
- * The stable `id` prefix is what lets the app tell a seeded contact from a
- * user-added one — a deliberately deleted default must not silently reappear.
- */
 val DefaultEmergencyContacts: List<EmergencyContact> = listOf(
     EmergencyContact(
         id = "default_bogo_police",
@@ -261,13 +205,6 @@ data class SirenSettings(
     val criticalAlerts: Boolean = true,
     val vibration: Boolean = true,
     val contacts: List<EmergencyContact> = DefaultEmergencyContacts,
-    /**
-     * False until an account has been created or signed into on this device once.
-     *
-     * A first-time install opens on Create Account rather than Login: somebody who has
-     * just downloaded the app has nothing to sign in with, and landing on a login form
-     * asks them for credentials that do not exist yet. Once they have an account the
-     * order flips back, because from then on signing in is the common case.
-     */
+
     val hasAccount: Boolean = false,
 )

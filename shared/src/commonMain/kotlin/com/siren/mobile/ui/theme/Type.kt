@@ -14,12 +14,6 @@ import com.siren.mobile.resources.inter_regular
 import com.siren.mobile.resources.inter_semibold
 import org.jetbrains.compose.resources.Font
 
-/**
- * Inter, recovered from the shipped APK — the same family the prototype uses.
- *
- * Compose Multiplatform's `Font()` is @Composable (resources are loaded through the
- * composition), so unlike the Android-only build these cannot be top-level `val`s.
- */
 @Composable
 fun interFamily(): FontFamily = FontFamily(
     Font(Res.font.inter_regular, FontWeight.Normal),

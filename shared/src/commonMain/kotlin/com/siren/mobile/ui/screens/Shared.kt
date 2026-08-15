@@ -26,10 +26,6 @@ import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.util.DateFmt
 
-/**
- * Back-navigable screen title. The back affordance is a real IconButton so it gets a
- * ripple and a full 48dp target, rather than a bare clickable Icon.
- */
 @Composable
 fun ScreenHeader(
     title: String,
@@ -60,10 +56,6 @@ fun ScreenHeader(
     }
 }
 
-/**
- * One person in a teacher's roster or a parent's linked-children list. Shared so the
- * live roll-call and the dashboards present identical rows.
- */
 @Composable
 fun RosterRow(person: LinkedPerson, modifier: Modifier = Modifier) {
     val detail = when (person.status) {
@@ -80,11 +72,6 @@ fun RosterRow(person: LinkedPerson, modifier: Modifier = Modifier) {
     )
 }
 
-/**
- * Identity block shared by the student, teacher and parent dashboards. Using the same
- * header on all three is what makes the app feel like one product rather than three
- * screens that happen to ship together.
- */
 @Composable
 fun DashboardHeader(
     initials: String,

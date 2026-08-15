@@ -31,22 +31,13 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 
-/**
- * Android half of [PlatformServices].
- *
- * The activity class and notification icon are injected because this lives in the
- * shared library, which cannot reference the app module's MainActivity or resources.
- */
 class AndroidPlatformServices(
     context: Context,
     private val activityClass: Class<*>,
     private val smallIconRes: Int,
     private val alarmSoundRes: Int,
     override val versionName: String,
-    /**
-     * The activity currently on screen, or null. Phone verification needs a real
-     * Activity for its reCAPTCHA fallback, and this class only holds an app context.
-     */
+
     private val currentActivity: () -> Activity? = { null },
 ) : PlatformServices {
 
@@ -63,18 +54,14 @@ class AndroidPlatformServices(
     private val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     init {
-        // The alarm service lives in this library and cannot see the app module's R
-        // class or MainActivity, so they are handed over here.
+
         SirenAlarmService.soundResId = alarmSoundRes
         SirenAlarmService.smallIconResId = smallIconRes
         SirenAlarmService.activityClass = activityClass
     }
 
-    // ---------------------------------------------------------------- alarm
-
     override fun startAlarm(alertId: String, intensity: Intensity, magnitudeG: Double, vibrate: Boolean) {
-        // Green is informational only — a single chime and buzz, no service, and it
-        // respects the ringer. Anything higher escalates to the foreground service.
+
         if (intensity == Intensity.GREEN) {
             showAlertNotification(alertId, intensity, magnitudeG)
             if (vibrate) vibrateForIntensity(intensity)
@@ -87,7 +74,7 @@ class AndroidPlatformServices(
             putExtra(SirenAlarmService.EXTRA_INTENSITY, intensity.wire)
             putExtra(SirenAlarmService.EXTRA_MAGNITUDE, magnitudeG)
             putExtra(SirenAlarmService.EXTRA_VIBRATE, vibrate)
-            // Yellow steps down on its own; Red never does.
+
             putExtra(
                 SirenAlarmService.EXTRA_TIMEOUT_MS,
                 if (intensity == Intensity.YELLOW) 30_000L else 0L,
@@ -96,34 +83,12 @@ class AndroidPlatformServices(
         runCatching { ContextCompat.startForegroundService(appContext, intent) }
     }
 
-    /**
-     * Stops the alarm. **Uses `startService`, never `startForegroundService`.**
-     *
-     * `startForegroundService` is a promise that the service will call `startForeground`
-     * within five seconds, and Android kills the process with
-     * `ForegroundServiceDidNotStartInTimeException` if it does not. ACTION_STOP goes
-     * straight to `stopEverything()` → `stopSelf()` and never goes foreground, so that
-     * promise could not be kept.
-     *
-     * It only crashed when the service was not *already* foreground, which is why it
-     * looked intermittent: responding to a Green alert (no service is ever started for
-     * one), to a Yellow after its 30-second timeout, after "Silence alarm", or to any
-     * past event reopened from history. In each case "I'm Safe" started a fresh service
-     * purely to tell it to stop, and the app died five seconds later — including when
-     * the tap came from the alarm notification, because ACTION_SAFE calls through here
-     * too.
-     *
-     * Stopping needs no foreground promise. If the service is not running there is
-     * nothing to stop, and `startService` throwing from the background is caught here.
-     */
     override fun stopAlarm() {
         val intent = Intent(appContext, SirenAlarmService::class.java)
             .setAction(SirenAlarmService.ACTION_STOP)
         runCatching { appContext.startService(intent) }
         cancelVibration()
     }
-
-    // ------------------------------------------------------------ vibration
 
     private val vibrator: Vibrator?
         get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -154,8 +119,6 @@ class AndroidPlatformServices(
     override fun cancelVibration() {
         runCatching { vibrator?.cancel() }
     }
-
-    // -------------------------------------------------------- notifications
 
     fun ensureChannels() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -208,9 +171,6 @@ class AndroidPlatformServices(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        // The intensity leads, because that is what somebody acts on. The measured
-        // acceleration follows it as a trailing detail, matching how the in-app readouts
-        // put the g figure underneath the level in smaller type.
         val level = intensity.levelText
         val title = if (intensity == Intensity.GREEN) {
             "Minor tremor detected — $level"
@@ -255,8 +215,6 @@ class AndroidPlatformServices(
         runCatching { NotificationManagerCompat.from(appContext).cancel(NOTIFICATION_ID) }
     }
 
-    // --------------------------------------------------------------- intents
-
     private fun digits(phone: String) = phone.filter { it.isDigit() || it == '+' }
 
     override fun dial(phone: String) {
@@ -277,8 +235,6 @@ class AndroidPlatformServices(
         }
     }
 
-    // -------------------------------------------------------------- storage
-
     override fun readSettingsJson(): String? = prefs.getString(KEY_SETTINGS, null)
 
     override fun writeSettingsJson(json: String) {
@@ -291,14 +247,6 @@ class AndroidPlatformServices(
 
     override fun nowMillis(): Long = System.currentTimeMillis()
 
-    // ------------------------------------------------------------ phone auth
-
-    /**
-     * The Android SDK always has `PhoneAuthProvider`, so the capability is present in
-     * every build. Whether the *Firebase project* will actually send an SMS is a console
-     * setting, and failing that way produces a specific message in [phoneAuthMessage]
-     * rather than a silently missing option.
-     */
     override val phoneAuthSupported: Boolean = true
 
     override suspend fun sendPhoneCode(phoneE164: String): PhoneCodeRequest {
@@ -309,12 +257,7 @@ class AndroidPlatformServices(
 
         return suspendCancellableCoroutine { cont ->
             val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
-                /**
-                 * Some numbers and some devices never need the user to type anything —
-                 * Google Play can validate the SIM directly, or auto-read the SMS. When
-                 * that happens sign-in is already done and asking for a code would be a
-                 * dead end, so the caller is told to skip that step.
-                 */
+
                 override fun onVerificationCompleted(credential: PhoneAuthCredential) {
                     if (!cont.isActive) return
                     auth.signInWithCredential(credential).addOnCompleteListener { task ->
@@ -380,13 +323,6 @@ class AndroidPlatformServices(
         }
     }
 
-    /**
-     * Phone auth fails for three reasons that are nothing to do with the user, and the
-     * raw SDK text for all three is unreadable. They are worth naming because every one
-     * of them is fixed in the Firebase console, not in the app:
-     * the project is on Spark rather than Blaze, the signing certificate's SHA-256 is
-     * not registered, or the Phone provider is switched off.
-     */
     private fun phoneAuthMessage(e: Throwable?): String {
         val raw = e?.message.orEmpty()
         return when {
@@ -420,14 +356,6 @@ class AndroidPlatformServices(
         }
     }
 
-    // ------------------------------------------------- full-screen alerting
-
-    /**
-     * Android 14 (API 34) took `USE_FULL_SCREEN_INTENT` away from everything that is not
-     * a calling or alarm app. Declaring it in the manifest is no longer enough, and when
-     * it is denied a Red alert produces a looping alarm behind a notification the user
-     * may never look at. Older releases grant it from the manifest alone.
-     */
     override fun canUseFullScreenIntent(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
         val manager = appContext.getSystemService(NotificationManager::class.java) ?: return false
@@ -443,7 +371,7 @@ class AndroidPlatformServices(
             Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
             Uri.parse("package:${appContext.packageName}"),
         ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        // Not every OEM ships that screen; fall back rather than throwing at the user.
+
         runCatching { appContext.startActivity(intent) }.onFailure { openNotificationSettings() }
     }
 
@@ -461,17 +389,6 @@ class AndroidPlatformServices(
         runCatching { NotificationManagerCompat.from(appContext).areNotificationsEnabled() }
             .getOrDefault(true)
 
-    /**
-     * "Display over other apps" — `SYSTEM_ALERT_WINDOW`.
-     *
-     * Nothing is drawn over anything. It is requested purely because it is the one
-     * documented exemption from the Android 10+ ban on background activity starts, which
-     * is what otherwise stops [SirenAlarmService] from raising the alert itself when the
-     * full-screen intent has been denied. On the OEM skins that are strictest about
-     * full-screen intents — this is the "Display pop-up windows while running in
-     * background" toggle on Xiaomi/HyperOS — it is the only remaining way to get an alert
-     * onto a locked screen.
-     */
     override fun canLaunchAlertOverOtherApps(): Boolean =
         runCatching { Settings.canDrawOverlays(appContext) }.getOrDefault(false)
 
@@ -481,9 +398,6 @@ class AndroidPlatformServices(
             Uri.parse("package:${appContext.packageName}"),
         ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
-        // Some OEMs reject the package-scoped form and only accept the bare action, which
-        // lands on the full app list rather than this app's row. Worse than a deep link,
-        // better than nothing happening when the user taps Fix.
         runCatching { appContext.startActivity(direct) }.onFailure {
             runCatching {
                 appContext.startActivity(
@@ -494,17 +408,8 @@ class AndroidPlatformServices(
         }
     }
 
-    // --------------------------------------------------------- profile photo
-
     override val photoPickerSupported: Boolean = true
 
-    /**
-     * Delegates to the Activity, which owns the `registerForActivityResult` launcher.
-     *
-     * Null when there is no foreground Activity — the picker is a UI action, so that
-     * only happens if the screen went away mid-tap, and reporting "cancelled" is the
-     * right reading of it.
-     */
     override suspend fun pickProfilePhoto(): String? =
         (currentActivity() as? ProfilePhotoPicker)?.pickProfilePhoto()
 }

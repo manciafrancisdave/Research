@@ -49,13 +49,6 @@ import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.util.DateFmt
 import com.siren.mobile.util.tabular
 
-/**
- * The student's side of guardian linking: who is following them, and who has asked to.
- *
- * Previously a student had no way to see this at all — a parent typed a code and silently
- * gained a live feed of that student's safety status. Confirmation happens here, and so
- * does revocation.
- */
 @Composable
 fun GuardiansScreen(
     shortCode: String,
@@ -121,8 +114,6 @@ fun GuardiansScreen(
             }
         }
 
-        // Requests come first: this is the only screen where they can be answered, and
-        // a parent is waiting on the other end of each one.
         if (pending.isNotEmpty()) {
             item { SectionLabel("Waiting for your confirmation") }
             pending.forEach { req ->
@@ -197,9 +188,7 @@ fun GuardiansScreen(
             item {
                 ListGroup {
                     guardians.forEachIndexed { i, person ->
-                        // Outside an event every guardian reads "No reply", which would
-                        // look like something is wrong. The status only means anything
-                        // while there is an event to have responded to.
+
                         if (eventActive) {
                             RosterRow(person)
                         } else {

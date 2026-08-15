@@ -39,10 +39,6 @@ import com.siren.mobile.util.DateFmt
 import com.siren.mobile.util.asG
 import com.siren.mobile.util.tabular
 
-/**
- * Prototype screen 12. Exists so the app can be demonstrated and evaluated without the
- * ESP32 sensor node attached — the hardware and app tracks did not finish together.
- */
 @Composable
 fun DemoScreen(
     alerts: List<AlertRecord>,
@@ -105,9 +101,7 @@ fun DemoScreen(
                 ListGroup {
                     log.forEachIndexed { i, entry ->
                         ListRow(
-                            // 3 decimals: the Green band is 0.010 g wide, so the
-                            // default 2 would render a 0.005 g simulation as
-                            // "0.01g" -- the Yellow boundary, and the wrong band.
+
                             title = "${entry.intensity.severity} · ${entry.magnitudeG.asG(3)}",
                             subtitle = "${DateFmt.date(entry.detectedAt)} · ${DateFmt.clockSeconds(entry.detectedAt)}",
                             leading = {

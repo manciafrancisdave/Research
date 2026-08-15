@@ -10,13 +10,6 @@ import java.lang.ref.WeakReference
 
 class SirenApp : Application() {
 
-    /**
-     * The activity currently in the foreground.
-     *
-     * Phone verification needs a real Activity for its reCAPTCHA fallback, and
-     * AndroidPlatformServices only holds an application context. Weak so a destroyed
-     * activity is never held alive by this reference.
-     */
     private var foreground: WeakReference<Activity>? = null
 
     override fun onCreate() {
@@ -38,8 +31,6 @@ class SirenApp : Application() {
             override fun onActivityDestroyed(activity: Activity) = Unit
         })
 
-        // The shared library cannot see MainActivity or this module's resources, so
-        // they are injected here.
         val services = AndroidPlatformServices(
             context = this,
             activityClass = MainActivity::class.java,
@@ -51,7 +42,6 @@ class SirenApp : Application() {
         services.ensureChannels()
         Platform.install(services)
 
-        // Starts the auth listener and Firestore subscriptions before the first frame.
         SirenRepository.start()
     }
 }

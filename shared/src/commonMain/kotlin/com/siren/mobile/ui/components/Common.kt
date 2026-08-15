@@ -79,20 +79,12 @@ import com.siren.mobile.ui.theme.SirenTheme
 import com.siren.mobile.ui.theme.Space
 import com.siren.mobile.util.tabular
 
-// ---------------------------------------------------------------- containers
-
-/**
- * Three deliberate tiers. Using them consistently is what stops every screen looking
- * like an undifferentiated stack of white cards.
- */
 enum class SurfaceTier {
-    /** The one thing that matters on the screen. */
+
     Primary,
 
-    /** Grouped rows, list items, secondary panels. */
     Secondary,
 
-    /** Metadata and helper blocks — no container chrome at all. */
     Tertiary,
 }
 
@@ -129,10 +121,6 @@ fun SirenCard(
     }
 }
 
-/**
- * A single container holding several rows separated by dividers. Reads as one
- * considered block rather than N floating cards, and scans far faster.
- */
 @Composable
 fun ListGroup(
     modifier: Modifier = Modifier,
@@ -157,7 +145,6 @@ fun RowDivider() {
     )
 }
 
-/** One row inside a [ListGroup]. Meets the 48dp touch-target minimum. */
 @Composable
 fun ListRow(
     title: String,
@@ -201,8 +188,6 @@ fun ListRow(
     }
 }
 
-// ------------------------------------------------------------------ headings
-
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
@@ -235,8 +220,6 @@ fun SectionHeader(
     }
 }
 
-// ------------------------------------------------------------------- buttons
-
 enum class ButtonTone { Primary, Safe, Danger, Neutral, OnColor }
 
 @Composable
@@ -254,10 +237,7 @@ fun PrimaryButton(
     val container: Color
     val content: Color
     when (tone) {
-        // Deliberately NOT colorScheme.primary. Material lightens primary for dark
-        // themes, which turned the main call-to-action into a pale, washed-out blue
-        // that read as a different colour from the rest of the app. The brand blue is
-        // fixed across both themes; white on it is 5.17:1, comfortably above AA.
+
         ButtonTone.Primary -> {
             container = SirenBlue
             content = Color.White
@@ -272,7 +252,7 @@ fun PrimaryButton(
             container = MaterialTheme.colorScheme.surfaceContainerHigh
             content = MaterialTheme.colorScheme.onSurface
         }
-        // Sits on an already-saturated background, e.g. the full-screen alert.
+
         ButtonTone.OnColor -> {
             container = Color.White; content = onColorContent
         }
@@ -288,9 +268,7 @@ fun PrimaryButton(
         colors = ButtonDefaults.buttonColors(
             containerColor = container,
             contentColor = content,
-            // Material's defaults derive these from onSurface alphas, which in dark
-            // mode look like a different component entirely. Anchoring them to the
-            // surface ramp keeps a disabled button obviously the same button.
+
             disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ),
@@ -331,8 +309,6 @@ fun SecondaryButton(
     }
 }
 
-// --------------------------------------------------------------------- chips
-
 @Composable
 fun Pill(
     text: String,
@@ -354,10 +330,6 @@ fun Pill(
     }
 }
 
-/**
- * Status is conveyed by icon + label + colour, never colour alone — a colour-blind
- * teacher still has to be able to read the roster.
- */
 @Composable
 fun StatusChip(status: ResponseStatus, modifier: Modifier = Modifier) {
     val s = SirenTheme.status
@@ -406,8 +378,6 @@ fun IntensityBadge(intensity: Intensity, modifier: Modifier = Modifier) {
     )
 }
 
-// -------------------------------------------------------------------- pieces
-
 @Composable
 fun Avatar(
     initials: String,
@@ -426,8 +396,7 @@ fun Avatar(
                 bitmap = bitmap,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
-                // Crop, not Fit: a letterboxed portrait inside a 42dp tile is mostly
-                // background, and every avatar in a roster has to read at a glance.
+
                 contentScale = ContentScale.Crop,
             )
             return@Surface
@@ -443,25 +412,6 @@ fun Avatar(
     }
 }
 
-/**
- * Class status as one restrained block: a proportional bar and a compact legend.
- *
- * This replaces a row of four tinted tiles. Four equally-weighted pastel boxes gave
- * every number identical importance, turned the top of the screen into a rainbow, and
- * when everything was zero amounted to pure decoration. A single bar shows the split
- * at a glance and the counts read as data, with colour reduced to a small dot that
- * ties each figure to its status.
- */
-/**
- * Decodes a base64 profile picture once per distinct value.
- *
- * The `remember(photo)` key is load-bearing. Decoding runs on the composition thread,
- * and a roster redraws on every incoming safety response during an event — decoding
- * thirty JPEGs per frame would stutter the one screen that must not stutter.
- *
- * A corrupt or truncated string yields null and the initials show instead, which is the
- * right failure: an avatar is never worth crashing a safety dashboard over.
- */
 @OptIn(ExperimentalEncodingApi::class)
 @Composable
 fun rememberPhotoBitmap(photo: String): ImageBitmap? = remember(photo) {
@@ -520,7 +470,7 @@ fun RosterBreakdown(
                             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                     )
                 } else {
-                    // Ordered most-urgent-first so the eye lands on trouble.
+
                     if (needsHelp > 0) {
                         Box(Modifier.weight(needsHelp.toFloat()).fillMaxHeight().background(s.dangerFill))
                     }
@@ -615,8 +565,6 @@ fun OfflineBanner(modifier: Modifier = Modifier) {
     )
 }
 
-// -------------------------------------------------------------------- states
-
 @Composable
 fun EmptyState(
     title: String,
@@ -668,7 +616,6 @@ fun ErrorState(
     }
 }
 
-/** Shimmering placeholder — reads as "loading" far better than a bare spinner. */
 @Composable
 fun Skeleton(
     modifier: Modifier = Modifier,
@@ -717,8 +664,6 @@ fun SkeletonList(rows: Int = 4, modifier: Modifier = Modifier) {
         }
     }
 }
-
-// -------------------------------------------------------------------- fields
 
 @Composable
 fun SirenField(

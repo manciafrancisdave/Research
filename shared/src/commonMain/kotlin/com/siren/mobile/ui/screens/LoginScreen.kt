@@ -40,11 +40,6 @@ import com.siren.mobile.ui.theme.Layout
 import com.siren.mobile.ui.theme.Space
 import org.jetbrains.compose.resources.painterResource
 
-/**
- * Prototype screen 02, laid out to the approved reference: the seismograph mark and
- * the full product name are centred above the form, then fields, then the primary
- * action.
- */
 @Composable
 fun LoginScreen(
     loading: Boolean,

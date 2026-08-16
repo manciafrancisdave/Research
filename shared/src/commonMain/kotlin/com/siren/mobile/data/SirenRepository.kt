@@ -36,7 +36,11 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -120,6 +124,18 @@ object SirenRepository {
     private var alertsInitialised = false
     private var lastIncomingId: String? = null
 
+    /** Alerts the user has already dismissed, so a late fetch cannot put them back up. */
+    private val dismissedAlertIds = mutableSetOf<String>()
+
+    /** Alerts a help SMS batch has already gone out for, to stop repeat taps re-sending. */
+    private val helpSmsSentFor = mutableSetOf<String>()
+
+    /** How long to wait for the profile snapshot on a cold start before giving up. */
+    private const val PROFILE_WAIT_MS = 10_000L
+
+    /** Shorter — an empty link list is also the legitimate "no guardians" answer. */
+    private const val LINKS_WAIT_MS = 6_000L
+
     fun start() {
 
         loadSettings()
@@ -132,7 +148,9 @@ object SirenRepository {
                     val uid = firebaseUser?.uid
                     _signedIn.value = uid != null
                     if (uid == null) {
-                        detachAll()
+                        // Not clearIncomingAlert: the `alerts` topic reaches signed-out
+                        // devices too, so a push may already be on screen.
+                        detachAll(clearIncomingAlert = false)
                         _user.value = null
                     } else {
                         attachFor(uid)
@@ -252,6 +270,10 @@ object SirenRepository {
 
             cleaned.startsWith("09") && cleaned.length >= 11 -> "+63" + cleaned.drop(1)
             cleaned.startsWith("63") -> "+$cleaned"
+            // A PH mobile written without its leading zero — sign-up accepts ten digits, and
+            // without this the number was stored un-normalised and later handed to the radio
+            // as a local string that another network cannot route.
+            cleaned.startsWith("9") && cleaned.length == 10 -> "+63$cleaned"
             else -> cleaned
         }
     }
@@ -336,7 +358,7 @@ object SirenRepository {
     }
 
     private fun attachFor(uid: String) {
-        detachAll()
+        detachAll(clearIncomingAlert = false)
 
         profileJob = scope.launch {
             usersCol.document(uid).snapshots
@@ -359,6 +381,13 @@ object SirenRepository {
                     _user.value = profile
                     attachRosterMembers(profile)
                     attachLinkRequests(profile)
+                    // Also here, not only in the link-requests collector: that collector is
+                    // attached once and attachLinkRequests returns early when it already
+                    // is, so a number added later in Edit profile would otherwise never
+                    // reach the link documents the student texts.
+                    if (profile.role == Role.PARENT) {
+                        refreshParentPhoneOnLinks(_linkRequests.value, profile.phone)
+                    }
                     recomputeGuardians()
                 }
         }
@@ -391,6 +420,14 @@ object SirenRepository {
                     if (!alertsInitialised) {
                         alertsInitialised = true
                         lastIncomingId = newest?.id
+                        // The first snapshot deliberately does not raise an alert, or every
+                        // launch would replay the last one. But an alert already on screen
+                        // came from the push and is real, so upgrade it to the stored record
+                        // rather than leaving the payload-built stand-in.
+                        _incomingAlert.value?.let { showing ->
+                            list.firstOrNull { it.id == showing.id }
+                                ?.let { _incomingAlert.value = it }
+                        }
                     } else if (newest != null && newest.id != lastIncomingId) {
                         lastIncomingId = newest.id
                         if (!newest.closed) {
@@ -548,7 +585,10 @@ object SirenRepository {
                     }.sortedByDescending { it.requestedAt }
 
                     _linkRequests.value = list
-                    if (profile.role == Role.PARENT) adoptApprovedLinks(list)
+                    if (profile.role == Role.PARENT) {
+                        adoptApprovedLinks(list)
+                        refreshParentPhoneOnLinks(list, profile.phone)
+                    }
                     recomputeGuardians()
                 }
         }
@@ -564,6 +604,28 @@ object SirenRepository {
         if (target == current) return
         runCatching { usersCol.document(uid).update("linkedStudentIds" to target.toList()) }
             .onFailure { notifyUi("Couldn't update your linked students: ${it.message}", true) }
+    }
+
+    /**
+     * Repairs `parentPhone` on this parent's own link documents.
+     *
+     * The number is written when the link is first requested, and nothing else ever touched
+     * it — so every link made before that field existed carried no number at all, and a
+     * guardian who later changed their number left a dead one frozen on the document. Both
+     * cases end with the student's emergency text going nowhere.
+     *
+     * The parent's client does the repair because Firestore only lets each user write their
+     * own data, the same split [adoptApprovedLinks] uses. Editing a profile therefore
+     * propagates to the links within one snapshot.
+     */
+    private suspend fun refreshParentPhoneOnLinks(requests: List<LinkRequest>, phone: String) {
+        val uid = auth.currentUser?.uid ?: return
+        if (!looksLikePhone(phone)) return
+        requests
+            .filter { it.parentId == uid && it.parentPhone != phone }
+            .forEach { req ->
+                runCatching { linkRequestsCol.document(req.id).update("parentPhone" to phone) }
+            }
     }
 
     private fun recomputeGuardians() {
@@ -643,7 +705,16 @@ object SirenRepository {
             )
     }
 
-    private fun detachAll() {
+    /**
+     * Tears down every per-session listener.
+     *
+     * [clearIncomingAlert] exists because an incoming alert is **push state, not session
+     * state**. On a cold start the FCM message paints the alert before auth resolves, and
+     * the first auth emission then runs this — wiping an alert that is already on screen
+     * over the keyguard, with the alarm still sounding. Attach/detach pass false; only an
+     * explicit sign-out clears it.
+     */
+    private fun detachAll(clearIncomingAlert: Boolean = true) {
         profileJob?.cancel(); profileJob = null
         alertsJob?.cancel(); alertsJob = null
         myRespJob?.cancel(); myRespJob = null
@@ -663,7 +734,13 @@ object SirenRepository {
         _roster.value = emptyList()
         _guardians.value = emptyList()
         _linkRequests.value = emptyList()
-        _incomingAlert.value = null
+        if (clearIncomingAlert) {
+            _incomingAlert.value = null
+            // Per-session, not per-device: another account signing in on the same phone must
+            // not inherit this one's dismissals or its "already texted" record.
+            dismissedAlertIds.clear()
+            helpSmsSentFor.clear()
+        }
     }
 
     private fun reportListenerError(what: String, err: Throwable) {
@@ -871,7 +948,14 @@ object SirenRepository {
     fun submitMyResponse(alertId: String, status: ResponseStatus) {
 
         Platform.services.stopAlarm()
-        val uid = auth.currentUser?.uid ?: return
+        // The alert now paints for signed-out devices too (the `alerts` topic reaches every
+        // install), so this return is reachable from a fully rendered alert screen. Saying
+        // nothing would leave "your adviser is notified the moment you respond" on screen
+        // after a tap that recorded nothing.
+        val uid = auth.currentUser?.uid ?: run {
+            notifyUi("You're signed out, so your status wasn't sent. Sign in to report it.", true)
+            return
+        }
         val payload = ResponseDoc(
             userId = uid,
             name = _user.value?.name.orEmpty(),
@@ -904,12 +988,51 @@ object SirenRepository {
      * themselves, and has no guardians to notify.
      */
     private fun sendHelpSms(alertId: String) {
-        val profile = _user.value ?: return
-        if (profile.role != Role.STUDENT) return
         if (!_settings.value.alertSmsEnabled) return
+        // One batch per alert. Both the alert screen and the notification action reach here,
+        // and a frightened student taps more than once — without this, every tap sent every
+        // guardian another multipart message.
+        if (!helpSmsSentFor.add(alertId)) return
 
-        val approved = _linkRequests.value.filter { it.status == LinkRequestStatus.APPROVED }
-        if (approved.isEmpty()) return
+        scope.launch { sendHelpSmsNow(alertId) }
+    }
+
+    private suspend fun sendHelpSmsNow(alertId: String) {
+        // On the case this whole feature exists for — a phone woken from the dead by a push,
+        // answered from the lock screen — the profile and link snapshots have not arrived
+        // yet. Returning early there meant the cold-start tap sent nothing and said nothing,
+        // silently, which is the worst outcome available. Wait for them instead.
+        val profile = withTimeoutOrNull(PROFILE_WAIT_MS) { _user.filterNotNull().first() }
+        if (profile == null) {
+            helpSmsSentFor.remove(alertId)
+            reportSmsOutcome(
+                "Guardians were not texted",
+                "SIREN could not load your account in time to text your guardians. Your " +
+                    "response was recorded. Open the app and tap \"I need help\" again.",
+                isError = true,
+            )
+            return
+        }
+        if (profile.role != Role.STUDENT) {
+            helpSmsSentFor.remove(alertId)
+            return
+        }
+
+        var approved = _linkRequests.value.filter { it.status == LinkRequestStatus.APPROVED }
+        if (approved.isEmpty()) {
+            // Empty is also the legitimate "no guardians" answer, so wait only briefly and
+            // then proceed either way rather than blocking on something that may never come.
+            approved = withTimeoutOrNull(LINKS_WAIT_MS) {
+                _linkRequests.map { list -> list.filter { it.status == LinkRequestStatus.APPROVED } }
+                    .first { it.isNotEmpty() }
+            }.orEmpty()
+        }
+        if (approved.isEmpty()) {
+            // Release the guard: nothing was sent, and a student whose links arrive a moment
+            // later must not be permanently barred from ever asking again for this alert.
+            helpSmsSentFor.remove(alertId)
+            return
+        }
 
         val recipients = approved.mapNotNull { req ->
             val number = req.parentPhone.takeIf { looksLikePhone(it) }
@@ -920,10 +1043,13 @@ object SirenRepository {
         val withoutNumber = approved.size - recipients.size
 
         if (recipients.isEmpty()) {
-            notifyUi(
-                "Your response was recorded, but no guardian has a mobile number saved, so " +
-                    "no text could be sent. Ask them to add one in Settings → Edit profile.",
-                true,
+            helpSmsSentFor.remove(alertId)
+            reportSmsOutcome(
+                "No guardian could be texted",
+                "Your response was recorded in the app, but no guardian has a mobile number " +
+                    "saved. Ask them to open SIREN and add one in Settings → Edit profile; " +
+                    "it reaches your link automatically once they do.",
+                isError = true,
             )
             return
         }
@@ -931,11 +1057,31 @@ object SirenRepository {
         val alert = _alerts.value.firstOrNull { it.id == alertId } ?: _incomingAlert.value
         val body = helpSmsBody(profile.name, alert)
 
-        scope.launch {
-            val result = runCatching { Platform.services.sendSmsDirect(recipients, body) }
-                .getOrElse { SmsDispatchResult(failed = recipients.size) }
-            notifyUi(smsResultMessage(result.copy(noNumber = withoutNumber)), result.sent == 0)
-        }
+        val result = runCatching { Platform.services.sendSmsDirect(recipients, body) }
+            .getOrElse { SmsDispatchResult(failed = recipients.size) }
+            .copy(noNumber = withoutNumber)
+        // Allow a retry if nothing actually went out, so the de-duplication guard cannot
+        // turn one failed attempt into a permanent refusal to try again.
+        if (result.sent == 0) helpSmsSentFor.remove(alertId)
+        reportSmsOutcome(
+            if (result.sent > 0) "Help requested" else "Guardians were not texted",
+            smsResultMessage(result),
+            isError = result.sent == 0,
+        )
+    }
+
+    /**
+     * Reports an SMS outcome through both the in-app snackbar and a notification.
+     *
+     * The notification is not belt-and-braces, it is the only channel that works on the path
+     * this matters most: answering from the alarm notification with the app closed. `_events`
+     * has no replay and its only collector lives inside the composition, so with no Activity
+     * alive every one of these messages was being discarded — silently telling nobody that
+     * nobody had been texted.
+     */
+    private fun reportSmsOutcome(title: String, message: String, isError: Boolean) {
+        notifyUi(message, isError)
+        runCatching { Platform.services.postPlainNotification(title, message) }
     }
 
     /**
@@ -948,6 +1094,11 @@ object SirenRepository {
     }
 
     private fun helpSmsBody(name: String, alert: AlertRecord?): String = buildString {
+        // A drill must never reach a guardian looking like a real earthquake. The alert
+        // screen already badges simulations; a text that omitted it would be indistinguishable
+        // from the real thing to the one person who cannot see the screen.
+        val simulated = alert?.source == AlertSource.SIMULATED
+        if (simulated) append("DEMO — NOT A REAL EVENT\n")
         append("SIREN ALERT\n")
         append(name.ifBlank { "A student" })
         append(" has tapped I NEED HELP.\n\n")
@@ -956,9 +1107,15 @@ object SirenRepository {
             append("Time: ").append(DateFmt.clock(alert.detectedAt)).append('\n')
         }
         append("\nSent automatically by the SIREN app.")
+        if (simulated) append("\nThis was a practice drill. No action is needed.")
     }
 
     private fun smsResultMessage(r: SmsDispatchResult): String = when {
+        r.couldNotAsk ->
+            "SIREN could not ask for permission to text your guardians, because the app was " +
+                "not open. Your response was recorded. Open SIREN and allow sending texts so " +
+                "this works next time."
+
         r.permissionDenied ->
             "Permission to send texts was declined, so your guardians were not messaged. " +
                 "Your response was still recorded in the app."
@@ -996,6 +1153,9 @@ object SirenRepository {
      * carries the real one and overwrites this within a second on a healthy connection.
      */
     fun showAlertFromPush(alertId: String, intensity: Intensity, magnitudeG: Double) {
+        // FCM redelivers, and a redelivered push for an alert the student has already
+        // answered and cleared must not put it back on their screen.
+        if (alertId in dismissedAlertIds) return
         if (_incomingAlert.value?.id != alertId) {
             _incomingAlert.value = AlertRecord(
                 id = alertId,
@@ -1008,15 +1168,31 @@ object SirenRepository {
         showAlertById(alertId)
     }
 
-    fun showAlertById(alertId: String) {
+    /**
+     * @param userInitiated true when the user deliberately asked to open this alert.
+     *
+     * The dismissal guard below suppresses only *automatic* re-raises — a Firestore read
+     * started before the tap, landing seconds later and putting the alert back up over a
+     * phone the student has just put down. It must never suppress a deliberate reopen: this
+     * is also the only route the dashboard's "Confirm your status" button and the recent-event
+     * rows have, and blocking those left a student who dismissed the alert and then needed
+     * help with no way back to the response buttons at all.
+     */
+    fun showAlertById(alertId: String, userInitiated: Boolean = false) {
+        if (userInitiated) {
+            dismissedAlertIds -= alertId
+        } else if (alertId in dismissedAlertIds) {
+            return
+        }
         scope.launch {
             _alerts.value.firstOrNull { it.id == alertId }?.let {
-                _incomingAlert.value = it
+                if (userInitiated || alertId !in dismissedAlertIds) _incomingAlert.value = it
                 return@launch
             }
             runCatching {
                 val snap = alertsCol.document(alertId).get()
                 if (!snap.exists) return@runCatching
+                if (!userInitiated && alertId in dismissedAlertIds) return@runCatching
                 val doc = snap.data(AlertDoc.serializer())
                 _incomingAlert.value = AlertRecord(
                     id = snap.id,
@@ -1034,6 +1210,7 @@ object SirenRepository {
     fun consumeIncomingAlert() {
         Platform.services.stopAlarm()
         Platform.services.clearNotifications()
+        _incomingAlert.value?.id?.let { dismissedAlertIds += it }
         _incomingAlert.value = null
     }
 
@@ -1156,6 +1333,8 @@ internal data class SettingsDoc(
 
     val alertSmsEnabled: Boolean = true,
 
+    val smsPermissionAsked: Boolean = false,
+
     val hasAccount: Boolean = false,
 ) {
     fun toModel() = SirenSettings(
@@ -1163,6 +1342,7 @@ internal data class SettingsDoc(
         vibration = vibration,
         contacts = contacts.map { EmergencyContact(it.id, it.name, it.relation, it.phone, it.primary) },
         alertSmsEnabled = alertSmsEnabled,
+        smsPermissionAsked = smsPermissionAsked,
         hasAccount = hasAccount,
     )
 
@@ -1173,6 +1353,7 @@ internal data class SettingsDoc(
             contacts = s.contacts.map { ContactDoc(it.id, it.name, it.relation, it.phone, it.primary) },
             seededDefaults = true,
             alertSmsEnabled = s.alertSmsEnabled,
+            smsPermissionAsked = s.smsPermissionAsked,
             hasAccount = s.hasAccount,
         )
     }

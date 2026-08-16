@@ -5,8 +5,10 @@ import android.app.Activity
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.RingtoneManager
@@ -17,6 +19,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.Settings
 import android.telephony.SmsManager
+import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -31,9 +34,15 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.siren.mobile.model.Intensity
 import com.siren.mobile.notify.SirenAlarmService
 import com.siren.mobile.util.asGSpaced
+import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 
 class AndroidPlatformServices(
     context: Context,
@@ -50,9 +59,26 @@ class AndroidPlatformServices(
         const val CHANNEL_ALERTS = "siren_alerts"
         private const val CHANNEL_QUIET = "siren_alerts_minor"
         private const val NOTIFICATION_ID = 4101
+
+        /** Separate id so an SMS outcome never replaces the alert notification itself. */
+        private const val NOTIFICATION_ID_STATUS = 4103
         const val EXTRA_ALERT_ID = "extra_alert_id"
         private const val PREFS = "siren_settings"
         private const val KEY_SETTINGS = "settings_json"
+
+        private const val ACTION_SMS_SENT = "com.siren.mobile.SMS_SENT"
+
+        /**
+         * How long to wait for the radio's verdict on one message. Generous, because a
+         * congested network after an earthquake is exactly when this is slow — but bounded,
+         * because a student staring at an unanswered screen needs an answer either way.
+         */
+        private const val SMS_RESULT_TIMEOUT_MS = 30_000L
+
+        /** Long enough for a human to read a permission dialog, short enough not to hang. */
+        private const val PERMISSION_TIMEOUT_MS = 120_000L
+
+        private val smsToken = AtomicInteger(1000)
     }
 
     private val appContext = context.applicationContext
@@ -240,7 +266,51 @@ class AndroidPlatformServices(
         }
     }
 
-    override val directSmsSupported: Boolean = true
+    // Telephony is declared required=false in the manifest so Wi-Fi-only tablets can install
+    // the app, which means a device with no telephony at all can reach this. Reporting true
+    // there would offer a Settings toggle and an emergency promise the hardware cannot keep.
+    override val directSmsSupported: Boolean =
+        runCatching {
+            context.packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
+        }.getOrDefault(true)
+
+    private fun smsPermissionGranted(): Boolean =
+        ContextCompat.checkSelfPermission(appContext, Manifest.permission.SEND_SMS) ==
+            PackageManager.PERMISSION_GRANTED
+
+    override suspend fun ensureSmsPermission(): Boolean {
+        if (smsPermissionGranted()) return true
+        val requester = currentActivity() as? SmsPermissionRequester ?: return false
+        return awaitPermission(requester)
+    }
+
+    /**
+     * Bounded so the dispatch cannot hang forever. The launcher's callback never fires if the
+     * Activity is recreated mid-prompt (rotation, or the system rebuilding it behind the
+     * keyguard), which would otherwise leave the coroutine — and the emergency SMS with it —
+     * waiting on a result that is never coming. Re-checks the real grant on timeout, since
+     * the user may well have answered before the Activity went away.
+     */
+    private suspend fun awaitPermission(requester: SmsPermissionRequester): Boolean =
+        withTimeoutOrNull(PERMISSION_TIMEOUT_MS) { requester.requestSmsPermission() }
+            ?: smsPermissionGranted()
+
+    override fun postPlainNotification(title: String, text: String) {
+        ensureChannels()
+        val builder = NotificationCompat.Builder(appContext, CHANNEL_QUIET)
+            .setSmallIcon(smallIconRes)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+
+        runCatching {
+            NotificationManagerCompat.from(appContext).notify(NOTIFICATION_ID_STATUS, builder.build())
+        }
+    }
 
     override suspend fun sendSmsDirect(
         recipients: List<SmsRecipient>,
@@ -248,16 +318,14 @@ class AndroidPlatformServices(
     ): SmsDispatchResult {
         if (recipients.isEmpty()) return SmsDispatchResult()
 
-        val requester = currentActivity() as? SmsPermissionRequester
-        val granted = when {
-            requester == null ->
-                ContextCompat.checkSelfPermission(appContext, Manifest.permission.SEND_SMS) ==
-                    PackageManager.PERMISSION_GRANTED
-
-            requester.hasSmsPermission() -> true
-            else -> requester.requestSmsPermission()
+        // Deliberately never prompts. A permission dialog cannot be answered over a secure
+        // keyguard, and waiting on one blocked the emergency send for up to two minutes
+        // before reporting a refusal the user was never shown. The grant is acquired ahead
+        // of time by ensureSmsPermission, while the app is open and calm; here we only ask
+        // whether we already have it.
+        if (!smsPermissionGranted()) {
+            return SmsDispatchResult(couldNotAsk = true, failed = recipients.size)
         }
-        if (!granted) return SmsDispatchResult(permissionDenied = true, failed = recipients.size)
 
         val manager = runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -268,29 +336,109 @@ class AndroidPlatformServices(
             }
         }.getOrNull() ?: return SmsDispatchResult(failed = recipients.size)
 
-        var sent = 0
-        var failed = 0
-        recipients.forEach { recipient ->
-            val number = digits(recipient.phone)
-            // Long messages must go out as multipart or the radio silently truncates them,
-            // and this one is deliberately longer than 160 characters.
-            val result = runCatching {
-                val parts = manager.divideMessage(body)
-                if (parts.size <= 1) {
-                    manager.sendTextMessage(number, null, body, null, null)
-                } else {
-                    manager.sendMultipartTextMessage(number, null, parts, null, null)
-                }
-            }
-            if (result.isSuccess) {
-                sent++
-            } else {
-                failed++
-                Log.w(TAG, "Emergency SMS to ${recipient.name} failed", result.exceptionOrNull())
-            }
+        // Only a definitively absent SIM short-circuits the batch. Every other state —
+        // UNKNOWN, NOT_READY, PIN/PUK required, or a value this API level does not model —
+        // is transient or non-authoritative, and refusing to even try on those would abandon
+        // an emergency message a working radio would have accepted. When in doubt, send.
+        val simState = runCatching {
+            appContext.getSystemService(TelephonyManager::class.java)?.simState
+        }.getOrNull()
+        if (simState == TelephonyManager.SIM_STATE_ABSENT) {
+            Log.w(TAG, "No SIM present; emergency SMS not attempted")
+            return SmsDispatchResult(failed = recipients.size)
         }
-        return SmsDispatchResult(sent = sent, failed = failed)
+
+        // Concurrently, not in series. Each send waits up to 30 s for the radio's verdict, so
+        // three guardians dispatched one after another could take a minute and a half — long
+        // enough that the later ones are never handed to the radio at all before the process
+        // is torn down. Every message goes out at once; the wait overlaps.
+        val outcomes = coroutineScope {
+            recipients.map { recipient ->
+                async {
+                    val ok = dispatchOne(manager, digits(recipient.phone), body)
+                    if (!ok) Log.w(TAG, "Emergency SMS to ${recipient.name} was not sent")
+                    ok
+                }
+            }.awaitAll()
+        }
+        return SmsDispatchResult(
+            sent = outcomes.count { it },
+            failed = outcomes.count { !it },
+        )
     }
+
+    /**
+     * Sends one message and waits for the platform's actual verdict.
+     *
+     * `sendTextMessage` is fire-and-forget: it does not throw when the message fails to go
+     * out. Every real failure — no service, radio off, no credit, carrier reject, rate limit
+     * — is delivered *only* through the `sentIntent`. Passing null there and trusting the
+     * absence of an exception meant counting binder calls, not sends, and telling a student
+     * mid-earthquake that guardians had been texted when nothing had left the phone.
+     *
+     * Long messages must go out as multipart or the radio truncates them silently, and this
+     * body is deliberately longer than one segment. The receiver resolves on the first part's
+     * result, which is enough to distinguish "the radio took it" from "the radio refused".
+     */
+    private suspend fun dispatchOne(manager: SmsManager, number: String, body: String): Boolean =
+        withTimeoutOrNull(SMS_RESULT_TIMEOUT_MS) {
+            suspendCancellableCoroutine { cont ->
+                val token = smsToken.incrementAndGet()
+                // A dynamically registered receiver is reachable by other apps below API 33,
+                // where RECEIVER_NOT_EXPORTED has no effect. The random suffix makes the
+                // action unguessable so a third party cannot forge a "delivered" broadcast
+                // and turn a failed emergency text into a reported success.
+                val action = "$ACTION_SMS_SENT.${UUID.randomUUID()}"
+                var receiver: BroadcastReceiver? = null
+
+                fun finish(ok: Boolean) {
+                    receiver?.let { r ->
+                        receiver = null
+                        runCatching { appContext.unregisterReceiver(r) }
+                    }
+                    if (cont.isActive) cont.resume(ok)
+                }
+
+                receiver = object : BroadcastReceiver() {
+                    override fun onReceive(context: Context, intent: Intent) {
+                        finish(resultCode == Activity.RESULT_OK)
+                    }
+                }
+                ContextCompat.registerReceiver(
+                    appContext,
+                    receiver,
+                    IntentFilter(action),
+                    ContextCompat.RECEIVER_NOT_EXPORTED,
+                )
+
+                val pending = PendingIntent.getBroadcast(
+                    appContext,
+                    token,
+                    Intent(action).setPackage(appContext.packageName),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+
+                runCatching {
+                    val parts = manager.divideMessage(body)
+                    if (parts.size <= 1) {
+                        manager.sendTextMessage(number, null, body, pending, null)
+                    } else {
+                        manager.sendMultipartTextMessage(
+                            number,
+                            null,
+                            parts,
+                            ArrayList(parts.map { pending }),
+                            null,
+                        )
+                    }
+                }.onFailure {
+                    Log.w(TAG, "Emergency SMS could not be handed to the radio", it)
+                    finish(false)
+                }
+
+                cont.invokeOnCancellation { finish(false) }
+            }
+        } ?: false
 
     override fun readSettingsJson(): String? = prefs.getString(KEY_SETTINGS, null)
 

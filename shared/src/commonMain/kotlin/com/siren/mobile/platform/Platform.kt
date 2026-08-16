@@ -35,7 +35,15 @@ data class SmsDispatchResult(
     val sent: Int = 0,
     val failed: Int = 0,
     val noNumber: Int = 0,
+    /** The user was asked for permission and said no. */
     val permissionDenied: Boolean = false,
+    /**
+     * Permission was missing and could not even be requested — there was no Activity to ask
+     * from, because the alert was answered from the notification while the app was not open.
+     * Distinct from [permissionDenied]: telling someone they declined something they were
+     * never asked is both wrong and unactionable.
+     */
+    val couldNotAsk: Boolean = false,
     val unsupported: Boolean = false,
 ) {
     val attempted: Int get() = sent + failed
@@ -73,6 +81,23 @@ interface PlatformServices {
      * guardian must not stop the others, and the caller reports the tally to the student.
      */
     suspend fun sendSmsDirect(recipients: List<SmsRecipient>, body: String): SmsDispatchResult
+
+    /**
+     * Acquires the SMS permission ahead of time, while the app is open and an Activity is
+     * available to ask from. Returns whether it is now granted.
+     *
+     * Necessary because the moment the permission is actually needed — a student answering
+     * from the alarm notification on a locked phone — is a moment when no Activity exists
+     * and no prompt can be shown. Asking only then means never asking.
+     */
+    suspend fun ensureSmsPermission(): Boolean
+
+    /**
+     * Posts a plain notification. Used to report the outcome of an emergency SMS, because
+     * the in-app snackbar has no collector when the response came from the notification
+     * actions with the app closed — the outcome would otherwise be discarded.
+     */
+    fun postPlainNotification(title: String, text: String)
 
     fun readSettingsJson(): String?
     fun writeSettingsJson(json: String)
@@ -125,6 +150,9 @@ private object NoOpPlatformServices : PlatformServices {
         recipients: List<SmsRecipient>,
         body: String,
     ): SmsDispatchResult = SmsDispatchResult(unsupported = true, failed = recipients.size)
+
+    override suspend fun ensureSmsPermission() = false
+    override fun postPlainNotification(title: String, text: String) = Unit
 
     override fun readSettingsJson(): String? = null
     override fun writeSettingsJson(json: String) = Unit

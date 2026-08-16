@@ -10,6 +10,7 @@ import platform.AudioToolbox.AudioServicesPlaySystemSound
 import platform.Foundation.NSBundle
 import platform.Foundation.NSDate
 import platform.Foundation.NSURL
+import platform.Foundation.NSUUID
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.timeIntervalSince1970
 import platform.UIKit.UIApplication
@@ -169,6 +170,26 @@ class IosPlatformServices(
         recipients: List<SmsRecipient>,
         body: String,
     ): SmsDispatchResult = SmsDispatchResult(unsupported = true, failed = recipients.size)
+
+    override suspend fun ensureSmsPermission(): Boolean = false
+
+    override fun postPlainNotification(title: String, text: String) {
+        val content = UNMutableNotificationContent().apply {
+            setTitle(title)
+            setBody(text)
+            setSound(UNNotificationSound.defaultSound())
+        }
+        // Unique per post: an identifier derived from the title would let a later outcome
+        // silently replace an earlier one, so "2 guardians texted" could erase "no guardian
+        // could be texted".
+        val request = UNNotificationRequest.requestWithIdentifier(
+            identifier = "siren_status_${NSUUID().UUIDString}",
+            content = content,
+            trigger = null,
+        )
+        UNUserNotificationCenter.currentNotificationCenter()
+            .addNotificationRequest(request) { _ -> }
+    }
 
     override fun readSettingsJson(): String? = defaults.stringForKey(KEY_SETTINGS)
 

@@ -16,9 +16,13 @@ named `SIREN-v<version>-debug.apk`.
 
 | File | Version | Size | Built |
 |---|---|---|---|
-| `SIREN-v2.9.0-debug.apk` | 2.9.0 (versionCode 7) | 25.7 MB | 17 Aug 2026 |
+| `SIREN-v2.9.1-debug.apk` | 2.9.1 (versionCode 8) | 25.7 MB | 17 Aug 2026 |
 
-2.9.0 adds the emergency SMS to guardians and makes a mobile number mandatory at sign-up.
+2.9.0 added the emergency SMS to guardians and made a mobile number mandatory at sign-up.
+**2.9.1 fixes thirteen defects found by adversarial review of 2.8.0 and 2.9.0** — see
+`dist/release/README.md` for the list. All were silent failures on the emergency path that a
+passing build could not have caught, which is why step 9 below matters more than the rest.
+
 Verified in the artifact: `SEND_SMS` reached the merged manifest — it is declared in `app/`
 while the code using it lives in `:shared`, so those are separate claims.
 
@@ -128,6 +132,13 @@ uninstall before switching between them.
    - a guardian with no mobile number saved is reported as unreachable, not silently skipped
    - the message arrives whole, not truncated at 160 characters
    - with mobile data off, the SMS still goes — that is the entire reason it exists
-10. Respond on one account and verify it appears on a teacher or parent account
-11. Airplane mode → respond → reconnect → confirm the response syncs
-12. Open the Safety Guide — it is the canary for Compose-resource packaging
+   - **put the phone in flight mode and try again** — it must now report failure, not
+     success. Before 2.9.1 this reported "guardians texted" with nothing sent
+10. **Dismiss an alert, then reopen it from the dashboard.** "Confirm your status" and the
+    Recent-events rows must still work. The dismissal guard added in 2.9.1 very nearly broke
+    these into dead taps — which would have left a student who dismissed the alarm and then
+    needed help with no route to "I need help" at all. It was caught before release; this
+    step is here so it stays caught
+11. Respond on one account and verify it appears on a teacher or parent account
+12. Airplane mode → respond → reconnect → confirm the response syncs
+13. Open the Safety Guide — it is the canary for Compose-resource packaging

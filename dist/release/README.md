@@ -17,11 +17,28 @@ unpacking it.
 
 | File | Version | Signing | Size | Built |
 |---|---|---|---|---|
-| `SIREN-v2.9.0-release.apk` | 2.9.0 (versionCode 7) | `siren-release.jks`, alias `siren` | 4.60 MB | 17 Aug 2026 |
+| `SIREN-v2.9.1-release.apk` | 2.9.1 (versionCode 8) | `siren-release.jks`, alias `siren` | 4.60 MB | 17 Aug 2026 |
 
-2.9.0 adds the **emergency SMS**: a student tapping "I need help" texts their approved
+2.9.0 added the **emergency SMS**: a student tapping "I need help" texts their approved
 guardians automatically, before the Firestore write, so it works with no connection. A
-mobile number is now required at sign-up, because that feature is worthless without one.
+mobile number is required at sign-up, because that feature is worthless without one.
+
+**2.9.1 is the version to use. 2.9.0 should not be installed.** Three adversarial review
+passes over 2.8.0 and 2.9.0 found thirteen defects that a passing build could not have
+caught, every one of them a silent failure on the emergency path:
+
+- `detachAll()` wiped the push-painted alert on every cold start — the alert appeared over
+  the keyguard and then vanished, with the alarm still looping against a dark screen
+- `sendTextMessage` was called with a null `sentIntent`, so the app counted binder calls, not
+  sends, and reported "2 guardians texted" when nothing had left the phone
+- SEND_SMS could only ever be *checked*, never *requested*, on the notification-answer path
+  that stock Android 14 makes the default — zero texts, reported as "you declined"
+- `sendHelpSms` returned silently when the profile snapshot had not arrived, so the cold-start
+  lock-screen tap sent nothing and said nothing
+- `parentPhone` was never back-filled, so every pre-existing link texted nobody
+- a Back press closed the alert and left the alarm looping behind a blank keyguard
+- Demo Mode texted guardians an unmarked alert indistinguishable from a real earthquake
+
 Same signing key as 2.8.0, so this upgrades in place.
 
 **Testing it costs real money and reaches real people.** Use a second SIM you control.

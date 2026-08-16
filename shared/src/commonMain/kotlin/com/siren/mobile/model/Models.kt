@@ -222,5 +222,12 @@ data class SirenSettings(
      */
     val alertSmsEnabled: Boolean = true,
 
+    /**
+     * Whether the SEND_SMS prompt has already been shown once. Android stops presenting the
+     * dialog after two refusals, so asking on every launch would burn that budget long
+     * before the permission is ever needed.
+     */
+    val smsPermissionAsked: Boolean = false,
+
     val hasAccount: Boolean = false,
 )

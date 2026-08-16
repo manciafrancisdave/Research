@@ -144,7 +144,9 @@ Each of these cost a debugging cycle:
   `isShrinkResources = true` could not see `R.raw.siren_alarm` as reachable, because the
   only reference is passed into `AndroidPlatformServices` and stashed in a static on the
   alarm service. Debug played fine; release shipped with **zero** `res/raw` entries and
-  a completely silent alarm. `app/src/main/res/raw/keep.xml` pins it, and
+  a completely silent alarm. Related: `raiseAlarmVolume` records `priorAlarmVolume` only when
+  it is null, or a Yellow alert followed by a Red one captures the 60% floor as the user's
+  own setting and "restores" them to it, ratcheting their alarm volume up for good. `app/src/main/res/raw/keep.xml` pins it, and
   `isShrinkResources` is now `false` besides. A passing build proves nothing here — check
   the artifact.
 - **Do not check for the alarm audio by looking for `res/raw/siren_alarm.mp3` in a release
@@ -321,6 +323,24 @@ blank or wrong screen:
   `showAlertFromPush` builds the `AlertRecord` from the payload the push already carries and
   shows it immediately; the Firestore copy refines it when it lands. Its `detectedAt` is
   arrival time until then.
+- **`_incomingAlert` is push state, not session state.** `attachFor` opens with `detachAll`,
+  which used to null it — so on a cold start the auth emission wiped an alert the push had
+  already painted over the keyguard, the Activity dropped back behind the lock screen, and
+  the alarm kept looping against a dark display. Attach and the signed-out branch now pass
+  `clearIncomingAlert = false`; only an explicit sign-out clears it. For the same reason the
+  alerts listener's first snapshot, which deliberately does not raise anything, now *upgrades*
+  an alert already on screen to the stored record instead of ignoring it.
+- **An alert the user dismissed must not come back.** `showAlertById`'s Firestore read can
+  land seconds after the tap; `dismissedAlertIds` stops it re-raising a screen the student
+  deliberately cleared.
+- **Back must not close the alert.** Nothing registered a back handler over it, so a Back
+  press finished the Activity and left the alarm looping behind a blank keyguard. The three
+  deliberate exits are the buttons on the alert itself.
+- **The alert reaches signed-out devices.** `subscribeToAlertsTopic()` runs unconditionally
+  at start and nothing unsubscribes, so every install that has been opened once receives the
+  `alerts` topic. Since the overlay now sits outside the auth gates it renders in that state
+  too — hence `canRespond`, without which the response buttons appeared, discarded the tap,
+  and left "your adviser is notified the moment you respond" on screen.
 - **`setShowWhenLocked` and `FLAG_KEEP_SCREEN_ON` are sticky.** Nothing cleared them, so
   after an alert was answered the app stayed visible over the lock screen with the display
   pinned on. `MainActivity` follows `incomingAlert` and clears the override when it goes
@@ -479,6 +499,32 @@ and has no guardians to notify.
 - **`SEND_SMS` is requested at the moment of first use**, not at launch — asking to send
   texts on first run, before anyone has seen why, invites a reflexive refusal. If it is
   denied the response is still recorded and the student is told the texts did not go.
+- **`sendTextMessage` does not throw when a message fails to send.** Every real failure —
+  no service, radio off, no credit, carrier reject, rate limit — arrives *only* through the
+  `sentIntent` PendingIntent. Passing null there and trusting the absence of an exception
+  counts binder calls, not sends, and told a student mid-earthquake that guardians had been
+  texted when nothing had left the phone. `dispatchOne` registers a receiver and awaits the
+  real verdict per recipient, bounded at 30 s, with a SIM-state pre-check ahead of it.
+  **Never go back to a null `sentIntent`.**
+- **The permission cannot be requested from the path that needs it.** `SEND_SMS` can only be
+  prompted from a resumed Activity, and the case it exists for — answering from the alarm
+  notification on a locked phone — has no Activity at all. `ensureSmsPermission` is therefore
+  called from the app while it is open, once the student actually has a guardian to text.
+  When a dispatch finds the permission missing and no Activity, that is reported as
+  `couldNotAsk`, **not** `permissionDenied`: telling someone they declined something they
+  were never asked is both wrong and unactionable.
+- **Outcomes are reported by notification as well as snackbar.** `_events` has no replay and
+  its only collector lives inside the composition, so on the notification-answer path every
+  SMS outcome was being discarded — silently telling nobody that nobody had been texted.
+- **The cold-start tap must not return empty-handed.** On a push-woken process `_user` and
+  `_linkRequests` have not arrived yet, and the original early returns meant the lock-screen
+  tap sent nothing and said nothing. `sendHelpSmsNow` waits for the profile (10 s) and
+  briefly for links (6 s), and reports failure if they never come.
+- **One batch per alert** (`helpSmsSentFor`), because both the alert screen and the
+  notification action reach the same code and a frightened student taps more than once. The
+  entry is released again if nothing was sent, so a failure is still retryable.
+- **A simulated event must say so in the text.** The alert screen badges demos, but the
+  guardian receiving the SMS is the one person who cannot see that screen.
 - **"Sent" means handed to the radio, not delivered.** There are no delivery receipts.
   `SmsDispatchResult` carries sent / failed / noNumber / permissionDenied / unsupported
   separately because the student has to be told something true; an earthquake is the worst

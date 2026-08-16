@@ -218,7 +218,10 @@ class SirenAlarmService : Service() {
             val floor = ceil(max * fraction).toInt().coerceIn(1, max.coerceAtLeast(1))
             val current = am.getStreamVolume(AudioManager.STREAM_ALARM)
             if (max > 0 && current < floor) {
-                priorAlarmVolume = current
+                // Only the FIRST raise records the prior value. A Yellow alert followed by a
+                // Red one would otherwise capture the 60% floor as the user's own setting
+                // and "restore" them to it, ratcheting their alarm volume up permanently.
+                if (priorAlarmVolume == null) priorAlarmVolume = current
                 am.setStreamVolume(AudioManager.STREAM_ALARM, floor, 0)
             }
         }.onFailure { Log.w(TAG, "Could not raise the alarm stream volume", it) }

@@ -32,6 +32,11 @@
          after an earthquake. Note this permission is restricted on Google Play and would
          need a declared exception if this app were ever published there. -->
     <uses-permission android:name="android.permission.SEND_SMS" />
+    <!-- SEND_SMS implies a REQUIRED android.hardware.telephony feature, which would make the
+         app uninstallable on Wi-Fi-only tablets — devices a teacher or parent may well be
+         using to watch the roll call. The alert, alarm and Firestore paths need no telephony
+         at all; only the guardian SMS does, and it degrades to a reported failure. -->
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <application
         android:name=".SirenApp"

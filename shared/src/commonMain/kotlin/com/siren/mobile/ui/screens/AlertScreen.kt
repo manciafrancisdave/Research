@@ -66,6 +66,12 @@ fun AlertScreen(
     alert: AlertRecord,
     vibrationEnabled: Boolean,
     myResponse: SafetyResponse?,
+    /**
+     * False when nobody is signed in. The alert itself still shows — it reaches every
+     * install through the `alerts` topic — but a status cannot be recorded, so the response
+     * buttons are replaced rather than shown and silently ignored.
+     */
+    canRespond: Boolean = true,
     onRespond: (ResponseStatus) -> Unit,
     onConfirmStatus: () -> Unit,
     onDismiss: () -> Unit,
@@ -211,7 +217,20 @@ fun AlertScreen(
             )
         }
 
-        if (myResponse == null) {
+        if (!canRespond) {
+            // The alert reaches signed-out devices — the `alerts` topic goes to every
+            // install. Offering the buttons here would discard the tap and leave "your
+            // adviser is notified" on screen, which is worse than saying nothing can be
+            // sent. The alarm and its silence control stay available below regardless.
+            Text(
+                "Sign in to send your status. The alarm and safety guidance still work.",
+                color = Color.White,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else if (myResponse == null) {
 
             PrimaryButton(
                 text = "Yes, I'm safe",

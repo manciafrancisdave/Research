@@ -121,7 +121,25 @@ private fun AlertOverlay() {
     val myResponses by repo.myResponses.collectAsState()
     val settings by repo.settings.collectAsState()
 
+    // The overlay deliberately sits outside the auth gates, which means it can render with
+    // nobody signed in — the `alerts` topic reaches every install. A status cannot be
+    // recorded in that state, so the screen must not offer to record one.
+    //
+    // Gated on the auth session ALONE, deliberately. An earlier version also required the
+    // Firestore profile document, which hid the response buttons from a genuinely signed-in
+    // student for as long as that snapshot took — on a push cold start, the exact scenario
+    // this overlay exists for. `submitMyResponse` needs only `auth.currentUser`, which is
+    // restored from disk before any network call, so this is the honest condition.
+    val signedIn by repo.signedIn.collectAsState()
+    val canRespond = signedIn
+
     val incoming = incomingAlert
+
+    // Without this a Back press finishes the Activity and leaves the alarm looping behind a
+    // blank keyguard, with no way back to the alert short of finding the notification. The
+    // three deliberate exits are the buttons on the alert itself; Back is not one of them.
+    PlatformBackHandler(enabled = incoming != null) { }
+
     AnimatedVisibility(
         visible = incoming != null,
         enter = fadeIn(tween(160)) + scaleIn(tween(220), initialScale = 0.96f),
@@ -139,7 +157,7 @@ private fun AlertOverlay() {
                         indication = null,
                     ) {},
             ) {
-                if (confirming) {
+                if (confirming && canRespond) {
                     SafetyConfirmationScreen(
                         alert = incoming,
                         myResponse = myResponses[incoming.id],
@@ -152,6 +170,7 @@ private fun AlertOverlay() {
                         alert = incoming,
                         vibrationEnabled = settings.vibration,
                         myResponse = myResponses[incoming.id],
+                        canRespond = canRespond,
                         onRespond = { repo.submitMyResponse(incoming.id, it) },
                         onConfirmStatus = { confirming = true },
                         onDismiss = { repo.consumeIncomingAlert() },
@@ -269,7 +288,10 @@ private fun AppShell() {
         backStack.add(d)
     }
 
-    PlatformBackHandler(enabled = backStack.size > 1) { pop() }
+    // Disabled while an alert is up, so this cannot out-rank the overlay's own swallow-back
+    // and quietly navigate the hidden nav stack underneath it.
+    val alertShowing by repo.incomingAlert.collectAsState()
+    PlatformBackHandler(enabled = backStack.size > 1 && alertShowing == null) { pop() }
 
     fun addStudentToClass(code: String) {
         scope.launch {
@@ -282,6 +304,30 @@ private fun AppShell() {
                 is LinkResult.Requested, is LinkResult.AlreadyRequested -> "Student added."
             }
             snackbar.showSnackbar(msg)
+        }
+    }
+
+    // SEND_SMS has to be granted while the app is open, because the moment it is actually
+    // needed — a student answering from the alarm notification on a locked phone — there is
+    // no Activity to prompt from and the request silently cannot be made. Asked once the
+    // student actually has a guardian to text, so it is never a bare first-run prompt.
+    //
+    // Asked ONCE per install, not once per launch: Android stops showing the dialog after two
+    // refusals, so re-asking on every launch spends that budget before the permission is ever
+    // needed. And never while an alert is up — prompting then pauses the Activity, which is
+    // exactly what makes a concurrent emergency dispatch report that it could not ask.
+    val hasGuardianToText = guardians.isNotEmpty()
+    val alertOnScreen = alertShowing != null
+    LaunchedEffect(hasGuardianToText, settings.alertSmsEnabled, settings.smsPermissionAsked, alertOnScreen) {
+        if (profile.role == Role.STUDENT &&
+            hasGuardianToText &&
+            settings.alertSmsEnabled &&
+            !settings.smsPermissionAsked &&
+            !alertOnScreen &&
+            Platform.services.directSmsSupported
+        ) {
+            repo.updateSettings { it.copy(smsPermissionAsked = true) }
+            Platform.services.ensureSmsPermission()
         }
     }
 
@@ -369,7 +415,7 @@ private fun AppShell() {
                             onOpenSettings = { selectTab(Dest.Settings) },
                             onOpenGuide = { push(Dest.Guide) },
                             onOpenGuardians = { push(Dest.Guardians) },
-                            onOpenAlert = { repo.showAlertById(it.id) },
+                            onOpenAlert = { repo.showAlertById(it.id, userInitiated = true) },
                         )
 
                         Role.TEACHER -> TeacherDashboardScreen(

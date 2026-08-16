@@ -21,8 +21,8 @@ android {
         applicationId = "com.research.siren"
         minSdk = 24
         targetSdk = 35
-        versionCode = 7
-        versionName = "2.9.0"
+        versionCode = 8
+        versionName = "2.9.1"
         vectorDrawables { useSupportLibrary = true }
     }
 

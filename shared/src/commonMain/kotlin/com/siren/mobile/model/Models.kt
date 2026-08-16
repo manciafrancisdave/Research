@@ -104,6 +104,14 @@ data class LinkRequest(
     val parentId: String,
     val parentName: String,
     val parentContact: String = "",
+
+    /**
+     * The guardian's mobile number, kept separate from [parentContact] because that one
+     * resolves to email whenever an email exists — which is every email/password signup.
+     * An emergency SMS needs a number specifically, and it is stored on the request so the
+     * student's device has it offline, which is exactly when it will be needed.
+     */
+    val parentPhone: String = "",
     val status: LinkRequestStatus = LinkRequestStatus.PENDING,
     val requestedAt: Long = 0L,
     val respondedAt: Long? = null,
@@ -205,6 +213,14 @@ data class SirenSettings(
     val criticalAlerts: Boolean = true,
     val vibration: Boolean = true,
     val contacts: List<EmergencyContact> = DefaultEmergencyContacts,
+
+    /**
+     * Text the student's linked guardians automatically when they tap "I need help".
+     * On by default: someone trapped or injured is in no position to send messages by
+     * hand, which is the whole point. It stays switchable because it spends the
+     * student's own load and reaches real people.
+     */
+    val alertSmsEnabled: Boolean = true,
 
     val hasAccount: Boolean = false,
 )

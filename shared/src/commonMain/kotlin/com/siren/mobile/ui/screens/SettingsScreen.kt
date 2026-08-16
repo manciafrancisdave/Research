@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.PrivacyTip
+import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.Warning
@@ -49,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import com.siren.mobile.model.Role
 import com.siren.mobile.model.SirenSettings
 import com.siren.mobile.model.UserProfile
+import com.siren.mobile.platform.Platform
 import com.siren.mobile.ui.components.Avatar
 import com.siren.mobile.ui.components.BannerTone
 import com.siren.mobile.ui.components.InfoBanner
@@ -166,6 +169,41 @@ fun SettingsScreen(
                 subtitle = "Escalates with intensity",
                 checked = settings.vibration,
             ) { v -> onUpdateSettings { it.copy(vibration = v) } }
+            if (Platform.services.directSmsSupported) {
+                RowDivider()
+                ToggleRow(
+                    icon = Icons.Filled.Sms,
+                    title = "Text my guardians for help",
+                    subtitle = "Sends an SMS automatically when you tap \"I need help\"",
+                    checked = settings.alertSmsEnabled,
+                ) { v -> onUpdateSettings { it.copy(alertSmsEnabled = v) } }
+            }
+        }
+
+        // Accounts created before a mobile number was required still have none, and a
+        // guardian without one cannot be texted when the student they follow asks for help.
+        // Nothing else in the app surfaces that, so it would fail silently at the worst
+        // possible moment.
+        if (user.phone.isBlank()) {
+            InfoBanner(
+                if (user.role == Role.STUDENT) {
+                    "No mobile number is saved on your account. Add one so your school and " +
+                        "guardians can reach you after an earthquake."
+                } else {
+                    "No mobile number is saved on your account. Without one, you will not " +
+                        "receive the emergency text if someone you follow taps \"I need help\"."
+                },
+                Icons.Filled.Smartphone,
+                tone = BannerTone.Danger,
+            )
+            ListGroup {
+                NavRow(
+                    Icons.Filled.Smartphone,
+                    "Add your mobile number",
+                    "Opens Edit profile",
+                    onEditProfile,
+                )
+            }
         }
 
         if (!notificationsAllowed) {

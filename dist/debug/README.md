@@ -16,21 +16,23 @@ named `SIREN-v<version>-debug.apk`.
 
 | File | Version | Size | Built |
 |---|---|---|---|
-| `SIREN-v2.8.0-debug.apk` | 2.8.0 (versionCode 6) | 25.7 MB | 16 Aug 2026 |
+| `SIREN-v2.9.0-debug.apk` | 2.9.0 (versionCode 7) | 25.7 MB | 17 Aug 2026 |
 
-**2.8.0 is the first build where the alert reaches the screen of a locked phone.**
+2.9.0 adds the emergency SMS to guardians and makes a mobile number mandatory at sign-up.
+Verified in the artifact: `SEND_SMS` reached the merged manifest — it is declared in `app/`
+while the code using it lives in `:shared`, so those are separate claims.
+
+2.8.0 was the first build where the alert reaches the screen of a locked phone.
 Everything before it could sound the alarm and wake the display, then show the
 splash — the alert UI sat behind the sign-in gates, which are all closed during the
 cold start a full-screen intent produces. It also raises the alarm stream volume,
-which used to leave a muted phone completely silent with no error.
+which used to leave a muted phone completely silent with no error. Both still apply
+here and are still untested on a device.
 
-`versionCode` moved 5 → 6, so unlike the previous pair a phone **will** treat this
-as an update by version.
-
-**Signed with this machine's debug key, so you must uninstall before installing.**
-`debug.keystore` is generated per machine and never committed, so this build cannot
-install over 2.7.0 — Android says "App not installed" and does not explain why. From
-2.8.0 onward, builds from this machine update in place.
+**Coming from 2.7.0 or earlier you must uninstall first.** `debug.keystore` is
+generated per machine and never committed, and this machine had none, so builds from
+2.8.0 onward are signed with a different key — Android says "App not installed" and
+does not explain why. Coming from 2.8.0, this installs over the top normally.
 
 Debug SHA-256, which has to be registered in Firebase for phone sign-up to work on a
 debug build:
@@ -54,16 +56,16 @@ Verified against the built artifact, not assumed:
   `assets/composeResources/`, which AGP 9's KMP-library plugin does not package on
   its own
 - 15 `classes*.dex` — R8 is off, as expected for debug
-- **All three alert permissions reached the merged manifest**
-  (`USE_FULL_SCREEN_INTENT`, `SYSTEM_ALERT_WINDOW`,
-  `FOREGROUND_SERVICE_MEDIA_PLAYBACK`). They are declared in `app/`, but the alarm
-  service relying on them lives in `:shared`, so "it is in the source" and "it is in
-  the APK" are separate claims
+- **All four permissions reached the merged manifest** (`USE_FULL_SCREEN_INTENT`,
+  `SYSTEM_ALERT_WINDOW`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, `SEND_SMS`). Each is
+  declared in `app/`, while the alarm service and SMS dispatch that rely on them live
+  in `:shared` — so "it is in the source" and "it is in the APK" are separate claims
 
 **Not run.** No device or emulator was available. These are static checks: they
 prove it compiled, packaged and carries its resources. They do not prove it
-launches or survives an alert — and for 2.8.0 specifically, they prove nothing at
-all about whether the alert now reaches a locked screen. That needs step 2 below.
+launches or survives an alert. In particular they prove **nothing** about the two
+things these versions exist for: whether the alert reaches a locked screen (step 2),
+and whether the emergency SMS actually sends (step 9).
 
 ## Why keep them separate from release
 
@@ -117,6 +119,15 @@ uninstall before switching between them.
    spinner
 8. **Force-stop the app, then trigger Red on a locked phone.** This is the true
    cold start — the case every earlier build got wrong
-9. Respond on one account and verify it appears on a teacher or parent account
-10. Airplane mode → respond → reconnect → confirm the response syncs
-11. Open the Safety Guide — it is the canary for Compose-resource packaging
+9. **The emergency SMS.** Sign up a student and a parent, link them, approve the link, then
+   tap **I need help**. Use a second SIM you control as the guardian — this sends a real
+   text and costs real load, and Demo Mode is not exempt. Check in order:
+   - the SEND_SMS prompt appears on the *first* help tap, not at launch
+   - **deny it once** — the response must still be recorded and the on-screen message must
+     say the texts did not go, rather than claiming success
+   - a guardian with no mobile number saved is reported as unreachable, not silently skipped
+   - the message arrives whole, not truncated at 160 characters
+   - with mobile data off, the SMS still goes — that is the entire reason it exists
+10. Respond on one account and verify it appears on a teacher or parent account
+11. Airplane mode → respond → reconnect → confirm the response syncs
+12. Open the Safety Guide — it is the canary for Compose-resource packaging

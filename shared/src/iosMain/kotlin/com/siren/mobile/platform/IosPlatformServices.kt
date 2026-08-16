@@ -159,6 +159,17 @@ class IosPlatformServices(
 
     override fun sendSms(phone: String) = open("sms", phone)
 
+    // iOS has no API for sending an SMS without the user pressing send —
+    // MFMessageComposeViewController always presents its own UI and requires the tap. There
+    // is no entitlement that changes this, so the automatic help text is Android-only and
+    // the repository falls back to recording the response in the app.
+    override val directSmsSupported: Boolean = false
+
+    override suspend fun sendSmsDirect(
+        recipients: List<SmsRecipient>,
+        body: String,
+    ): SmsDispatchResult = SmsDispatchResult(unsupported = true, failed = recipients.size)
+
     override fun readSettingsJson(): String? = defaults.stringForKey(KEY_SETTINGS)
 
     override fun writeSettingsJson(json: String) {

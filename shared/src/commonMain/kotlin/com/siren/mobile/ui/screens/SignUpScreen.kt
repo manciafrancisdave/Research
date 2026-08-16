@@ -50,7 +50,7 @@ fun SignUpScreen(
     error: String?,
     phoneSupported: Boolean,
     codeSent: Boolean,
-    onSignUp: (name: String, email: String, password: String) -> Unit,
+    onSignUp: (name: String, email: String, password: String, phone: String) -> Unit,
     onSendCode: (name: String, phone: String) -> Unit,
     onVerifyCode: (name: String, code: String) -> Unit,
     onCancelPhone: () -> Unit,
@@ -66,10 +66,19 @@ fun SignUpScreen(
 
     val tooShort = password.isNotEmpty() && password.length < MIN_PASSWORD
     val mismatch = confirm.isNotEmpty() && confirm != password
-    val emailValid = name.isNotBlank() && email.isNotBlank() &&
+
+    // A mobile number is required on every route, not just the phone one. The emergency
+    // SMS a student sends by tapping "I need help" goes to the numbers their guardians
+    // registered here — an account without one is silently unreachable at the only moment
+    // that matters, so it cannot be optional.
+    val mobileDigits = phone.count { it.isDigit() }
+    val mobileValid = mobileDigits >= 10
+    val mobileTyped = phone.isNotBlank()
+
+    val emailValid = name.isNotBlank() && email.isNotBlank() && mobileValid &&
         password.length >= MIN_PASSWORD && confirm == password
 
-    val phoneValid = name.isNotBlank() && phone.filter { it.isDigit() }.length >= 10
+    val phoneValid = name.isNotBlank() && mobileValid
 
     Column(
         Modifier
@@ -120,6 +129,20 @@ fun SignUpScreen(
                 label = "Email",
                 leadingIcon = Icons.Filled.Mail,
                 keyboardType = KeyboardType.Email,
+            )
+            SirenField(
+                value = phone,
+                onValueChange = { phone = it.filter { c -> c.isDigit() || c == '+' || c == ' ' } },
+                label = "Mobile number",
+                placeholder = "09XX XXX XXXX",
+                leadingIcon = Icons.Filled.Smartphone,
+                keyboardType = KeyboardType.Phone,
+                isError = mobileTyped && !mobileValid,
+                supportingText = if (mobileTyped && !mobileValid) {
+                    "Enter a complete mobile number"
+                } else {
+                    "Used to reach you if someone you're linked to asks for help"
+                },
             )
             SirenField(
                 value = password,
@@ -206,7 +229,7 @@ fun SignUpScreen(
 
             else -> PrimaryButton(
                 text = "Create account",
-                onClick = { onSignUp(name, email, password) },
+                onClick = { onSignUp(name, email, password, phone) },
                 enabled = emailValid,
                 loading = loading,
             )

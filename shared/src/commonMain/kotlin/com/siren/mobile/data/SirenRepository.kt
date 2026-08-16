@@ -16,6 +16,9 @@ import com.siren.mobile.model.UserProfile
 import com.siren.mobile.platform.Platform
 import com.siren.mobile.platform.PhoneCodeRequest
 import com.siren.mobile.platform.PhoneVerification
+import com.siren.mobile.platform.SmsDispatchResult
+import com.siren.mobile.platform.SmsRecipient
+import com.siren.mobile.util.DateFmt
 import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.auth.auth
 import dev.gitlive.firebase.firestore.Direction
@@ -159,13 +162,21 @@ object SirenRepository {
         }
     }
 
-    suspend fun signUp(name: String, email: String, password: String, role: Role): Boolean {
+    suspend fun signUp(
+        name: String,
+        email: String,
+        password: String,
+        phone: String,
+        role: Role,
+    ): Boolean {
         _authLoading.value = true
         _authError.value = null
         return try {
             val result = auth.createUserWithEmailAndPassword(email.trim(), password)
             val uid = result.user?.uid ?: error("No uid returned")
-            writeNewProfile(uid, name, email = email.trim(), phone = "", role = role)
+            // Stored in E.164 so a number typed as 0917... is still textable from a device
+            // on another network, and matches what phone sign-up writes.
+            writeNewProfile(uid, name, email = email.trim(), phone = normalisePhone(phone), role = role)
             markHasAccount()
             true
         } catch (e: Exception) {
@@ -528,6 +539,7 @@ object SirenRepository {
                                 parentId = doc.parentId,
                                 parentName = doc.parentName,
                                 parentContact = doc.parentContact,
+                                parentPhone = doc.parentPhone,
                                 status = LinkRequestStatus.fromName(doc.status),
                                 requestedAt = doc.requestedAt.toMillis(),
                                 respondedAt = doc.respondedAt?.toMillis(),
@@ -738,6 +750,7 @@ object SirenRepository {
                     parentId = uid,
                     parentName = me.name.ifBlank { "Parent / Guardian" },
                     parentContact = me.contact,
+                    parentPhone = me.phone,
                     status = LinkRequestStatus.PENDING.wire,
                     requestedAt = Timestamp.now(),
                     respondedAt = null,
@@ -866,6 +879,11 @@ object SirenRepository {
             respondedAt = Timestamp.now(),
             alertId = alertId,
         )
+        // Dispatched before the Firestore write, and not inside its runCatching. The write
+        // needs a connection; the SMS is the fallback for when there isn't one, so it must
+        // not be reached only after the network succeeds.
+        if (status == ResponseStatus.NEEDS_HELP) sendHelpSms(alertId)
+
         scope.launch {
             runCatching {
 
@@ -873,6 +891,89 @@ object SirenRepository {
                 usersCol.document(uid).collection("responses").document(alertId).set(payload)
             }.onFailure { notifyUi("Couldn't record your response: ${it.message}", true) }
         }
+    }
+
+    /**
+     * Texts the student's approved guardians that they have asked for help.
+     *
+     * This exists because the Firestore path assumes a parent is holding an unlocked phone
+     * with the app installed and a connection. After a real earthquake none of that is
+     * safe to assume, and SMS survives conditions data does not.
+     *
+     * Only students send. A teacher or parent tapping "I need help" is answering for
+     * themselves, and has no guardians to notify.
+     */
+    private fun sendHelpSms(alertId: String) {
+        val profile = _user.value ?: return
+        if (profile.role != Role.STUDENT) return
+        if (!_settings.value.alertSmsEnabled) return
+
+        val approved = _linkRequests.value.filter { it.status == LinkRequestStatus.APPROVED }
+        if (approved.isEmpty()) return
+
+        val recipients = approved.mapNotNull { req ->
+            val number = req.parentPhone.takeIf { looksLikePhone(it) }
+                ?: req.parentContact.takeIf { looksLikePhone(it) }
+                ?: return@mapNotNull null
+            SmsRecipient(req.parentName.ifBlank { "Guardian" }, number)
+        }
+        val withoutNumber = approved.size - recipients.size
+
+        if (recipients.isEmpty()) {
+            notifyUi(
+                "Your response was recorded, but no guardian has a mobile number saved, so " +
+                    "no text could be sent. Ask them to add one in Settings → Edit profile.",
+                true,
+            )
+            return
+        }
+
+        val alert = _alerts.value.firstOrNull { it.id == alertId } ?: _incomingAlert.value
+        val body = helpSmsBody(profile.name, alert)
+
+        scope.launch {
+            val result = runCatching { Platform.services.sendSmsDirect(recipients, body) }
+                .getOrElse { SmsDispatchResult(failed = recipients.size) }
+            notifyUi(smsResultMessage(result.copy(noNumber = withoutNumber)), result.sent == 0)
+        }
+    }
+
+    /**
+     * A number, not an email. `UserProfile.contact` resolves to email whenever one exists,
+     * so anything reaching here from an older link request has to be screened.
+     */
+    private fun looksLikePhone(raw: String): Boolean {
+        if (raw.isBlank() || raw.contains('@')) return false
+        return raw.count { it.isDigit() } >= 7
+    }
+
+    private fun helpSmsBody(name: String, alert: AlertRecord?): String = buildString {
+        append("SIREN ALERT\n")
+        append(name.ifBlank { "A student" })
+        append(" has tapped I NEED HELP.\n\n")
+        if (alert != null) {
+            append("Earthquake detected: ").append(alert.intensity.levelText).append('\n')
+            append("Time: ").append(DateFmt.clock(alert.detectedAt)).append('\n')
+        }
+        append("\nSent automatically by the SIREN app.")
+    }
+
+    private fun smsResultMessage(r: SmsDispatchResult): String = when {
+        r.permissionDenied ->
+            "Permission to send texts was declined, so your guardians were not messaged. " +
+                "Your response was still recorded in the app."
+
+        r.unsupported ->
+            "This device cannot send texts automatically. Your response was recorded in the app."
+
+        r.sent > 0 && r.failed == 0 && r.noNumber == 0 ->
+            "Help requested. ${r.sent} guardian${if (r.sent == 1) "" else "s"} texted."
+
+        r.sent > 0 ->
+            "Help requested. ${r.sent} of ${r.sent + r.failed + r.noNumber} guardians texted; " +
+                "the rest could not be reached."
+
+        else -> "Help requested, but no text could be sent. Your response was recorded in the app."
     }
 
     fun closeEvent(alertId: String) {
@@ -1020,6 +1121,7 @@ internal data class LinkRequestDoc(
     val parentId: String = "",
     val parentName: String = "",
     val parentContact: String = "",
+    val parentPhone: String = "",
     val status: String = "pending",
     val requestedAt: Timestamp? = null,
     val respondedAt: Timestamp? = null,
@@ -1052,12 +1154,15 @@ internal data class SettingsDoc(
 
     val seededDefaults: Boolean = false,
 
+    val alertSmsEnabled: Boolean = true,
+
     val hasAccount: Boolean = false,
 ) {
     fun toModel() = SirenSettings(
         criticalAlerts = criticalAlerts,
         vibration = vibration,
         contacts = contacts.map { EmergencyContact(it.id, it.name, it.relation, it.phone, it.primary) },
+        alertSmsEnabled = alertSmsEnabled,
         hasAccount = hasAccount,
     )
 
@@ -1067,6 +1172,7 @@ internal data class SettingsDoc(
             vibration = s.vibration,
             contacts = s.contacts.map { ContactDoc(it.id, it.name, it.relation, it.phone, it.primary) },
             seededDefaults = true,
+            alertSmsEnabled = s.alertSmsEnabled,
             hasAccount = s.hasAccount,
         )
     }

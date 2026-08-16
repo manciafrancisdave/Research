@@ -453,6 +453,47 @@ iOS reports `phoneAuthSupported = false`, which hides the option entirely: the
 FirebaseAuth pod is not linked, and silent-push device verification needs an APNs key
 that requires the paid Apple Developer account the project does not have.
 
+## The emergency SMS
+
+When a **student** taps "I need help", the app texts their approved guardians automatically,
+before writing anything to Firestore. That ordering is the point: the Firestore path assumes
+a guardian is holding an unlocked phone, with the app installed, on a working connection.
+After a real earthquake none of that is safe to assume, and SMS survives conditions data does
+not. `sendHelpSms` therefore sits outside the write's `runCatching` — it must not be reached
+only if the network succeeded.
+
+Only students send. A teacher or parent tapping the same button is answering for themselves
+and has no guardians to notify.
+
+- **`parentContact` is not a phone number.** `UserProfile.contact` is
+  `email.ifBlank { phone }`, so it resolves to email for every email/password signup. Link
+  requests carry a separate **`parentPhone`**, written when the parent raises the request,
+  and it lives on the request document specifically so the *student's* device holds it
+  offline — which is exactly when it is needed. Old requests fall back to `parentContact`,
+  but only through `looksLikePhone`, which rejects anything containing `@`.
+- **A mobile number is required at sign-up**, on both the email and phone routes, and stored
+  through `normalisePhone` as E.164. An account without one is silently unreachable at the
+  only moment that matters. Accounts predating this show a red banner in Settings until they
+  add one; `parentPhone` is **not** back-filled onto existing approved link requests, so
+  those guardians stay unreachable until they edit their profile.
+- **`SEND_SMS` is requested at the moment of first use**, not at launch — asking to send
+  texts on first run, before anyone has seen why, invites a reflexive refusal. If it is
+  denied the response is still recorded and the student is told the texts did not go.
+- **"Sent" means handed to the radio, not delivered.** There are no delivery receipts.
+  `SmsDispatchResult` carries sent / failed / noNumber / permissionDenied / unsupported
+  separately because the student has to be told something true; an earthquake is the worst
+  moment to imply a message went out when it did not.
+- **Messages are split with `divideMessage`.** The body is deliberately longer than 160
+  characters, and a single `sendTextMessage` would silently truncate it.
+- **iOS cannot do this at all.** `MFMessageComposeViewController` always requires a tap and
+  no entitlement changes that, so `directSmsSupported` is false there, the Settings toggle is
+  hidden, and the dispatch reports `unsupported`.
+- **Nothing is ever texted to the official responders.** Police and fire are one-tap manual
+  calls only. An unattended false alarm to an emergency hotline during a school drill is a
+  real hazard, and false emergency reports carry legal weight.
+- `SEND_SMS` is a **restricted permission on Google Play** and would need a declared
+  exception if this app were ever published there. It is fine for a sideloaded build.
+
 ## Profile pictures
 
 Stored as a **base64 JPEG on the user document**, not in Firebase Storage.

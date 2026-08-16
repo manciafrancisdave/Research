@@ -206,7 +206,9 @@ private fun AppShell() {
             phoneSupported = Platform.services.phoneAuthSupported,
             codeSent = phoneVerification != null,
             onSignIn = { email, pw -> scope.launch { repo.signIn(email, pw) } },
-            onSignUp = { name, email, pw, role -> scope.launch { repo.signUp(name, email, pw, role) } },
+            onSignUp = { name, email, pw, phone, role ->
+                scope.launch { repo.signUp(name, email, pw, phone, role) }
+            },
             onSendCode = { name, phone, role ->
                 scope.launch {
                     when (val result = repo.sendPhoneCode(phone)) {
@@ -588,7 +590,7 @@ private fun AuthFlow(
     phoneSupported: Boolean,
     codeSent: Boolean,
     onSignIn: (String, String) -> Unit,
-    onSignUp: (String, String, String, Role) -> Unit,
+    onSignUp: (String, String, String, String, Role) -> Unit,
     onSendCode: (name: String, phone: String, role: Role) -> Unit,
     onVerifyCode: (name: String, code: String, role: Role) -> Unit,
     onCancelPhone: () -> Unit,
@@ -647,7 +649,7 @@ private fun AuthFlow(
                 error = error,
                 phoneSupported = phoneSupported,
                 codeSent = codeSent,
-                onSignUp = { name, email, pw -> onSignUp(name, email, pw, role) },
+                onSignUp = { name, email, pw, phone -> onSignUp(name, email, pw, phone, role) },
                 onSendCode = { name, phone -> onSendCode(name, phone, role) },
                 onVerifyCode = { name, code -> onVerifyCode(name, code, role) },
                 onCancelPhone = onCancelPhone,

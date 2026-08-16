@@ -24,6 +24,23 @@ sealed interface PhoneCodeRequest {
     data class Failed(val reason: String) : PhoneCodeRequest
 }
 
+data class SmsRecipient(val name: String, val phone: String)
+
+/**
+ * Outcome of an automatic SMS dispatch. Every field is needed to tell the student
+ * something true: an earthquake is the worst moment to imply a message went out when it
+ * did not, and "sent" here means handed to the radio, not delivered.
+ */
+data class SmsDispatchResult(
+    val sent: Int = 0,
+    val failed: Int = 0,
+    val noNumber: Int = 0,
+    val permissionDenied: Boolean = false,
+    val unsupported: Boolean = false,
+) {
+    val attempted: Int get() = sent + failed
+}
+
 interface PlatformServices {
 
     val versionName: String
@@ -42,6 +59,20 @@ interface PlatformServices {
 
     fun dial(phone: String)
     fun sendSms(phone: String)
+
+    /**
+     * Whether this platform can send an SMS without the user pressing send. Android can,
+     * with the SEND_SMS permission. iOS has no such API at all — `MFMessageComposeViewController`
+     * always requires a tap — so there it stays false and callers fall back to [sendSms].
+     */
+    val directSmsSupported: Boolean
+
+    /**
+     * Sends [body] to every recipient without further interaction, requesting the SEND_SMS
+     * permission first if it has not been granted. Never throws: a failure to reach one
+     * guardian must not stop the others, and the caller reports the tally to the student.
+     */
+    suspend fun sendSmsDirect(recipients: List<SmsRecipient>, body: String): SmsDispatchResult
 
     fun readSettingsJson(): String?
     fun writeSettingsJson(json: String)
@@ -89,6 +120,12 @@ private object NoOpPlatformServices : PlatformServices {
     override fun stopAlarm() = Unit
     override fun dial(phone: String) = Unit
     override fun sendSms(phone: String) = Unit
+    override val directSmsSupported = false
+    override suspend fun sendSmsDirect(
+        recipients: List<SmsRecipient>,
+        body: String,
+    ): SmsDispatchResult = SmsDispatchResult(unsupported = true, failed = recipients.size)
+
     override fun readSettingsJson(): String? = null
     override fun writeSettingsJson(json: String) = Unit
     override fun subscribeToAlertsTopic() = Unit

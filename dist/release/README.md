@@ -17,7 +17,16 @@ unpacking it.
 
 | File | Version | Signing | Size | Built |
 |---|---|---|---|---|
-| `SIREN-v2.8.0-release.apk` | 2.8.0 (versionCode 6) | `siren-release.jks`, alias `siren` | 4.60 MB | 16 Aug 2026 |
+| `SIREN-v2.9.0-release.apk` | 2.9.0 (versionCode 7) | `siren-release.jks`, alias `siren` | 4.60 MB | 17 Aug 2026 |
+
+2.9.0 adds the **emergency SMS**: a student tapping "I need help" texts their approved
+guardians automatically, before the Firestore write, so it works with no connection. A
+mobile number is now required at sign-up, because that feature is worthless without one.
+Same signing key as 2.8.0, so this upgrades in place.
+
+**Testing it costs real money and reaches real people.** Use a second SIM you control.
+Demo Mode sends for real — the dispatch does not distinguish a simulated event from a
+sensor one.
 
 **The signing key changed again on 16 Aug 2026.** The key that signed 2.6.0 was
 not recoverable — it existed only on the machine that built it, and that machine

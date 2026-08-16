@@ -25,6 +25,14 @@
     <!-- Lets the alarm keep sounding through a Doze window. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- Texts a student's linked guardians when they tap "I need help". Requested at that
+         moment, not at launch, and the app records the response either way if it is
+         refused. SMS is here because it survives what the Firestore path does not: a
+         guardian whose phone is locked, whose app is not installed, or who has no data
+         after an earthquake. Note this permission is restricted on Google Play and would
+         need a declared exception if this app were ever published there. -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+
     <application
         android:name=".SirenApp"
         android:allowBackup="true"

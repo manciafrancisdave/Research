@@ -3,9 +3,11 @@ package com.siren.mobile
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
+import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -17,6 +19,7 @@ import com.siren.mobile.data.SirenRepository
 import com.siren.mobile.platform.AndroidPlatformServices
 import com.siren.mobile.platform.ProfilePhotoEncoder
 import com.siren.mobile.platform.ProfilePhotoPicker
+import com.siren.mobile.platform.SmsPermissionRequester
 import com.siren.mobile.ui.App
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CancellableContinuation
@@ -25,7 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 
-class MainActivity : ComponentActivity(), ProfilePhotoPicker {
+class MainActivity : ComponentActivity(), ProfilePhotoPicker, SmsPermissionRequester {
 
     companion object {
         const val EXTRA_ALERT_ID = AndroidPlatformServices.EXTRA_ALERT_ID
@@ -33,6 +36,18 @@ class MainActivity : ComponentActivity(), ProfilePhotoPicker {
 
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    private var pendingSmsPermission: CancellableContinuation<Boolean>? = null
+
+    // SEND_SMS is asked for at the moment it is first needed — when a student taps
+    // "I need help" — rather than at launch. Asking to send texts on first run, before
+    // anyone has seen why, is the kind of prompt people refuse out of hand.
+    private val smsPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val waiting = pendingSmsPermission
+            pendingSmsPermission = null
+            if (waiting != null && waiting.isActive) waiting.resume(granted)
+        }
 
     private var pendingPhoto: CancellableContinuation<String?>? = null
 
@@ -49,6 +64,24 @@ class MainActivity : ComponentActivity(), ProfilePhotoPicker {
                 if (waiting.isActive) waiting.resume(encoded)
             }
         }
+
+    override fun hasSmsPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, android.Manifest.permission.SEND_SMS) ==
+            PackageManager.PERMISSION_GRANTED
+
+    override suspend fun requestSmsPermission(): Boolean {
+        if (hasSmsPermission()) return true
+        return suspendCancellableCoroutine { cont ->
+            pendingSmsPermission?.takeIf { it.isActive }?.resume(false)
+            pendingSmsPermission = cont
+            cont.invokeOnCancellation { pendingSmsPermission = null }
+            runCatching { smsPermission.launch(android.Manifest.permission.SEND_SMS) }
+                .onFailure {
+                    pendingSmsPermission = null
+                    if (cont.isActive) cont.resume(false)
+                }
+        }
+    }
 
     override suspend fun pickProfilePhoto(): String? = suspendCancellableCoroutine { cont ->
 

@@ -1,11 +1,13 @@
 package com.siren.mobile.platform
 
+import android.Manifest
 import android.app.Activity
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.net.Uri
@@ -14,6 +16,8 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.Settings
+import android.telephony.SmsManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -42,6 +46,7 @@ class AndroidPlatformServices(
 ) : PlatformServices {
 
     companion object {
+        private const val TAG = "SirenPlatform"
         const val CHANNEL_ALERTS = "siren_alerts"
         private const val CHANNEL_QUIET = "siren_alerts_minor"
         private const val NOTIFICATION_ID = 4101
@@ -233,6 +238,58 @@ class AndroidPlatformServices(
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
         }
+    }
+
+    override val directSmsSupported: Boolean = true
+
+    override suspend fun sendSmsDirect(
+        recipients: List<SmsRecipient>,
+        body: String,
+    ): SmsDispatchResult {
+        if (recipients.isEmpty()) return SmsDispatchResult()
+
+        val requester = currentActivity() as? SmsPermissionRequester
+        val granted = when {
+            requester == null ->
+                ContextCompat.checkSelfPermission(appContext, Manifest.permission.SEND_SMS) ==
+                    PackageManager.PERMISSION_GRANTED
+
+            requester.hasSmsPermission() -> true
+            else -> requester.requestSmsPermission()
+        }
+        if (!granted) return SmsDispatchResult(permissionDenied = true, failed = recipients.size)
+
+        val manager = runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                appContext.getSystemService(SmsManager::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                SmsManager.getDefault()
+            }
+        }.getOrNull() ?: return SmsDispatchResult(failed = recipients.size)
+
+        var sent = 0
+        var failed = 0
+        recipients.forEach { recipient ->
+            val number = digits(recipient.phone)
+            // Long messages must go out as multipart or the radio silently truncates them,
+            // and this one is deliberately longer than 160 characters.
+            val result = runCatching {
+                val parts = manager.divideMessage(body)
+                if (parts.size <= 1) {
+                    manager.sendTextMessage(number, null, body, null, null)
+                } else {
+                    manager.sendMultipartTextMessage(number, null, parts, null, null)
+                }
+            }
+            if (result.isSuccess) {
+                sent++
+            } else {
+                failed++
+                Log.w(TAG, "Emergency SMS to ${recipient.name} failed", result.exceptionOrNull())
+            }
+        }
+        return SmsDispatchResult(sent = sent, failed = failed)
     }
 
     override fun readSettingsJson(): String? = prefs.getString(KEY_SETTINGS, null)

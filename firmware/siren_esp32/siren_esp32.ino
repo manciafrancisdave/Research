@@ -195,7 +195,7 @@ void calibrate() {
   bufPrimed = false;
   printCalibration();
 
-  lcdTwoLines("S.I.R.E.N. ready", "Monitoring...");
+  lcdTwoLines("SIREN ready", "Monitoring...");
   setLeds(true, false, false);
 }
 
@@ -430,7 +430,7 @@ void rejectAsNoise(float g) {
 void endAlert() {
   buzzerOff();
   setLeds(true, false, false);
-  lcdTwoLines("S.I.R.E.N. ready", "Monitoring...");
+  lcdTwoLines("SIREN ready", "Monitoring...");
   state = COOLDOWN;
   tStateEnd = millis() + COOLDOWN_MS;
 }
@@ -481,7 +481,7 @@ void setup() {
   Wire.begin(PIN_SDA, PIN_SCL);
   lcd.init();
   lcd.backlight();
-  lcdTwoLines("S.I.R.E.N.", "Booting...");
+  lcdTwoLines("SIREN", "Booting...");
 
   setLeds(true, true, true); delay(400); setLeds(false, false, false);
 

@@ -170,7 +170,7 @@ fun SettingsScreen(
 
         if (!notificationsAllowed) {
             InfoBanner(
-                "Notifications are switched off for S.I.R.E.N. You will not be warned of an earthquake until you turn them back on.",
+                "Notifications are switched off for SIREN. You will not be warned of an earthquake until you turn them back on.",
                 Icons.Filled.NotificationsOff,
                 tone = BannerTone.Danger,
             )
@@ -232,7 +232,7 @@ fun SettingsScreen(
             RowDivider()
             NavRow(Icons.Filled.PrivacyTip, "Privacy & data", "How your responses are stored") {}
             RowDivider()
-            NavRow(Icons.Filled.Info, "About S.I.R.E.N.", "Version $versionName") {}
+            NavRow(Icons.Filled.Info, "About SIREN", "Version $versionName") {}
         }
 
         ListGroup {

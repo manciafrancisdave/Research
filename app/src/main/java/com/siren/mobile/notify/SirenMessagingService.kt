@@ -38,7 +38,7 @@ class SirenMessagingService : FirebaseMessagingService() {
         )
 
         if (intensity != Intensity.GREEN) {
-            SirenRepository.showAlertById(alertId)
+            SirenRepository.showAlertFromPush(alertId, intensity, magnitude)
         }
     }
 }

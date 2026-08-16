@@ -1,6 +1,6 @@
-# CLAUDE.md — S.I.R.E.N. Mobile
+# CLAUDE.md — SIREN Mobile
 
-Mobile companion app for **S.I.R.E.N. (Seismic Integrated Response and Emergency
+Mobile companion app for **SIREN (Seismic Integrated Response and Emergency
 Notification)** — an IoT earthquake detection system built around an ESP32 +
 ADXL335 accelerometer (Practical Research 2, City of Bogo Senior High School).
 
@@ -260,6 +260,15 @@ Because MP3 carries encoder padding, its loop point is not perfectly gapless. A
 2-second watchdog in the service restarts playback if it ever stalls, so the alarm
 cannot fall silent while an event is unanswered.
 
+**`USAGE_ALARM` bypasses the ringer and DND, but not the alarm stream's own volume.** A
+phone with alarm volume at zero played nothing at all, silently and with no error — the one
+failure mode none of the routing flags above address. `raiseAlarmVolume` lifts
+`STREAM_ALARM` to a floor (90% Red, 60% Yellow) only when it is below one, remembers the
+previous value, and `stopEverything` puts it back. `setStreamVolume` can throw under some
+DND policies without `ACCESS_NOTIFICATION_POLICY`; that is caught rather than requested,
+because playback already bypasses DND and a refused volume change still leaves the alarm
+audible at whatever it was set to.
+
 ### Waking a dark, locked phone
 
 A full-screen intent launches `MainActivity`, but on a locked device that alone puts it
@@ -279,6 +288,33 @@ The keyguard is only asked to dismiss when it is **not** secured. `requestDismis
 on a PIN-locked phone prompts for the PIN, which is the last thing to put between someone
 and an earthquake warning. Showing over the lock screen is enough, and the notification's
 I'm safe / I need help actions work from there.
+
+Waking the screen was never the whole problem, though — **what the woken screen showed
+was**. Four further things, each of which independently produced a sounding alarm behind a
+blank or wrong screen:
+
+- **The alert overlay must live outside the auth gates.** `AppContent` returns early on
+  `!authResolved`, `!signedIn` and a null user document, and the overlay used to be drawn
+  *after* all three. A full-screen intent wakes a locked phone into a **cold start**, so
+  every one of those gates is closed at the moment the alert arrives: the phone lit up
+  showing the splash, then a spinner, while the alarm ran. The overlay is now a sibling of
+  the shell in a `Box` (`AppContent` → `AppShell` + `AlertOverlay`) and paints regardless of
+  sign-in state. **Do not move it back inside `AppShell`.**
+- **The system splash must not be held during an alert.**
+  `setKeepOnScreenCondition { !authResolved }` keeps Android's own splash window above
+  everything the app draws — including the fix above — for as long as Firebase takes, which
+  on a phone that woke with no network is forever. `MainActivity` now checks for the alert
+  extra on the launch intent and skips the hold.
+- **Render the alert from the push, not from Firestore.** `showAlertById` needs a document
+  read, and a locked, dozing, possibly offline phone is the worst case for one.
+  `showAlertFromPush` builds the `AlertRecord` from the payload the push already carries and
+  shows it immediately; the Firestore copy refines it when it lands. Its `detectedAt` is
+  arrival time until then.
+- **`setShowWhenLocked` and `FLAG_KEEP_SCREEN_ON` are sticky.** Nothing cleared them, so
+  after an alert was answered the app stayed visible over the lock screen with the display
+  pinned on. `MainActivity` follows `incomingAlert` and clears the override when it goes
+  null — while ignoring the initial null, or it would clear the flags `handleIntent` had
+  just set, before the alert had been fetched.
 
 ### Three OS grants that fail silently
 

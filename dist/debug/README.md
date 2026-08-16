@@ -27,22 +27,23 @@ which used to leave a muted phone completely silent with no error.
 `versionCode` moved 5 → 6, so unlike the previous pair a phone **will** treat this
 as an update by version.
 
-**But it is signed with a different debug key, so you must uninstall first.** It was
-built on a machine with no `~/.android/debug.keystore`, and the SDK silently generated
-a fresh one — Android then refuses the install over 2.7.0 with "App not installed", and
-Firebase **phone sign-up fails** on it with "This app is not authorized", which reads
-like a code fault and is not one.
+**Signed with this machine's debug key, so you must uninstall before installing.**
+`debug.keystore` is generated per machine and never committed, so this build cannot
+install over 2.7.0 — Android says "App not installed" and does not explain why. From
+2.8.0 onward, builds from this machine update in place.
 
-| | SHA-256 |
-|---|---|
-| Registered in Firebase | `28:6D:5C:E9:FB:00:D7:8C:7F:C5:87:18:F9:B4:ED:89:41:8B:6A:30:64:45:B7:D8:02:85:69:2F:09:34:79:BA` |
-| This 2.8.0 build | `84:45:C3:F4:A6:C4:F4:D8:23:72:FC:84:D6:84:30:BF:52:4B:2B:71:2B:9A:F8:1C:DD:AC:C0:60:22:44:60:11` |
+Debug SHA-256, which has to be registered in Firebase for phone sign-up to work on a
+debug build:
 
-Two ways out, either is fine: copy the original `debug.keystore` onto the build machine
-and rebuild, or register the fingerprint above in Firebase alongside the existing one.
-Email sign-in, alerts and everything else work regardless — only phone sign-up depends
-on the fingerprint. Read any APK's own fingerprint back with
-`apksigner verify --print-certs <apk>`; the release keystore does not have to be present.
+```
+84:45:C3:F4:A6:C4:F4:D8:23:72:FC:84:D6:84:30:BF:52:4B:2B:71:2B:9A:F8:1C:DD:AC:C0:60:22:44:60:11
+```
+
+Earlier notes claimed `28:6D:5C:E9:...` was already registered. It was not — the
+console's fingerprint list was empty on 16 Aug 2026, which is why phone sign-up has
+never sent an SMS. Only phone sign-up depends on this; email sign-in, alerts, Firestore
+and the alarm all work regardless. Read any APK's own fingerprint back with
+`apksigner verify --print-certs <apk>`; the keystore does not have to be present.
 
 Verified against the built artifact, not assumed:
 

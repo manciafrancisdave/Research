@@ -57,6 +57,10 @@ watching:
 - **Resource shrinking and path shortening do not happen.** `res/raw/siren_alarm.mp3`
   keeps its name, so "is the alarm audio present?" is easy to answer here and
   misleading in release. A silent alarm has shipped before precisely this way.
+  In release the same file is renamed — `res/dQ.mp3` as of 2.8.0 — so listing paths
+  finds **no `res/raw` entries** and looks like the bug even when nothing is wrong.
+  Resolve it through the resource table instead:
+  `aapt2 dump resources <apk> | Select-String -Context 0,1 "raw/siren_alarm"`.
 - **`lintVitalRelease` never runs.** Failures that only appear in release —
   historically the `androidx.fragment` version Firebase pulls in — are invisible
   from a debug build.

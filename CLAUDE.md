@@ -144,9 +144,20 @@ Each of these cost a debugging cycle:
   `isShrinkResources = true` could not see `R.raw.siren_alarm` as reachable, because the
   only reference is passed into `AndroidPlatformServices` and stashed in a static on the
   alarm service. Debug played fine; release shipped with **zero** `res/raw` entries and
-  a completely silent alarm. `app/src/main/res/raw/keep.xml` pins it. After touching
-  shrinking, always confirm the *release* APK still contains `res/raw/siren_alarm.mp3` —
-  a passing build proves nothing here.
+  a completely silent alarm. `app/src/main/res/raw/keep.xml` pins it, and
+  `isShrinkResources` is now `false` besides. A passing build proves nothing here — check
+  the artifact.
+- **Do not check for the alarm audio by looking for `res/raw/siren_alarm.mp3` in a release
+  APK.** AGP's resource *path shortening* renames it — in 2.8.0 it lands as `res/dQ.mp3`,
+  and the release APK legitimately has **no `res/raw` entries at all**. Listing paths
+  therefore reports a silent alarm on a perfectly good build. Ask the resource table
+  instead, which resolves the logical name to whatever the file was renamed to:
+  ```powershell
+  aapt2 dump resources <apk> | Select-String -Context 0,1 "raw/siren_alarm"
+  # raw/siren_alarm -> res/dQ.mp3   (139,695 bytes, same as debug)
+  ```
+  Path shortening does not apply to debug builds, which is why the by-name check works
+  there and quietly misleads in release — the one build where it matters.
 - **Android 14+ restricts `USE_FULL_SCREEN_INTENT`** to calling/alarm apps, and denies it
   by default. If it is denied, the full-screen alert silently never appears — leaving a
   user with a looping alarm and no visible way to stop it. Three layers answer that, and

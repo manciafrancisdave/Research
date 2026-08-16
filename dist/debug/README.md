@@ -4,7 +4,7 @@ Unminified, debuggable builds. Use these while testing on a phone — the
 stack traces are readable and `adb logcat` is useful.
 
 ```powershell
-$env:JAVA_HOME="C:\siren_toolchain\jdk-17.0.20+8"
+$env:JAVA_HOME="C:\Program Files\Eclipse Adoptium\jdk-17.0.20.8-hotspot"
 $env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
 $env:Path="$env:JAVA_HOME\bin;$env:Path"
 
@@ -16,28 +16,37 @@ named `SIREN-v<version>-debug.apk`.
 
 | File | Version | Size | Built |
 |---|---|---|---|
-| `SIREN-v2.7.0-debug.apk` | 2.7.0 (versionCode 5) | 25.7 MB | 13 Aug 2026 |
+| `SIREN-v2.8.0-debug.apk` | 2.8.0 (versionCode 6) | 25.7 MB | 16 Aug 2026 |
 
-**This file was rebuilt on 13 Aug and carries the full-screen alarm fix; the 8 Aug
-build it replaced does not.** Both are `2.7.0 (versionCode 5)`, so the version
-string cannot tell them apart and a phone will not treat the new one as an
-update. Uninstall before installing, or bump `versionCode` before handing this
-build to anyone who already has the old one.
+**2.8.0 is the first build where the alert reaches the screen of a locked phone.**
+Everything before it could sound the alarm and wake the display, then show the
+splash — the alert UI sat behind the sign-in gates, which are all closed during the
+cold start a full-screen intent produces. It also raises the alarm stream volume,
+which used to leave a muted phone completely silent with no error.
+
+`versionCode` moved 5 → 6, so unlike the previous pair a phone **will** treat this
+as an update. The signing key is unchanged from 2.7.0, so no uninstall is needed
+coming from that build.
 
 Verified against the built artifact, not assumed:
 
+- **Launcher label reads `SIREN`** — `aapt2 dump badging` reports
+  `application-label:'SIREN'`, and `string/app_name` resolves to `SIREN`
 - **Alarm audio** — `res/raw/siren_alarm.mp3` present at **139,695 bytes**
 - **Compose resources** — 28 `ic_sg_*` pictograms and 5 Inter weights under
-  `assets/composeResources/com.siren.mobile.resources/`, which AGP 9's
-  KMP-library plugin does not package on its own
+  `assets/composeResources/`, which AGP 9's KMP-library plugin does not package on
+  its own
 - 15 `classes*.dex` — R8 is off, as expected for debug
-- **`SYSTEM_ALERT_WINDOW` reached the merged manifest** (`aapt2 dump badging`).
-  It is declared in `app/`, but the alarm service that relies on it lives in
-  `:shared`, so "it is in the source" and "it is in the APK" are separate claims
+- **All three alert permissions reached the merged manifest**
+  (`USE_FULL_SCREEN_INTENT`, `SYSTEM_ALERT_WINDOW`,
+  `FOREGROUND_SERVICE_MEDIA_PLAYBACK`). They are declared in `app/`, but the alarm
+  service relying on them lives in `:shared`, so "it is in the source" and "it is in
+  the APK" are separate claims
 
 **Not run.** No device or emulator was available. These are static checks: they
 prove it compiled, packaged and carries its resources. They do not prove it
-launches or survives an alert.
+launches or survives an alert — and for 2.8.0 specifically, they prove nothing at
+all about whether the alert now reaches a locked screen. That needs step 2 below.
 
 ## Why keep them separate from release
 
@@ -77,6 +86,16 @@ uninstall before switching between them.
    - Full-screen alerts allowed → confirm the alert appears **once**, not twice
 5. Trigger Yellow on a locked phone — it now takes the screen too, which it did
    not before
-6. Respond on one account and verify it appears on a teacher or parent account
-7. Airplane mode → respond → reconnect → confirm the response syncs
-8. Open the Safety Guide — it is the canary for Compose-resource packaging
+6. **Turn the alarm volume to zero, then trigger Red.** New in 2.8.0: the service
+   lifts the alarm stream to a floor and restores it afterwards. Before this the
+   phone was silent with no error of any kind. Confirm the volume goes back down
+   once the alert is answered
+7. **Airplane mode, then trigger Red from another account.** The alert now renders
+   from the push payload rather than a Firestore read, so it must appear even with
+   no connection. This is the path that used to leave the alarm sounding behind a
+   spinner
+8. **Force-stop the app, then trigger Red on a locked phone.** This is the true
+   cold start — the case every earlier build got wrong
+9. Respond on one account and verify it appears on a teacher or parent account
+10. Airplane mode → respond → reconnect → confirm the response syncs
+11. Open the Safety Guide — it is the canary for Compose-resource packaging

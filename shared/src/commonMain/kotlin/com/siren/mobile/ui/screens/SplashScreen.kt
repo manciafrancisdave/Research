@@ -93,7 +93,7 @@ fun SplashScreen(versionName: String = "2.4.0") {
                 verticalArrangement = Arrangement.spacedBy(Space.s),
             ) {
                 Text(
-                    "S.I.R.E.N.",
+                    "SIREN",
                     color = Color.White,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 40.sp,

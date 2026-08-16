@@ -1,10 +1,10 @@
-# Prompt — S.I.R.E.N. UI overhaul + persistent emergency alarm
+# Prompt — SIREN UI overhaul + persistent emergency alarm
 
 Paste everything below the line into a fresh Claude Code session opened at the repo root.
 
 ---
 
-You are working on **S.I.R.E.N.**, an earthquake detection and alert app for City of
+You are working on **SIREN**, an earthquake detection and alert app for City of
 Bogo Senior High School (Practical Research 2). Read `CLAUDE.md` first — it documents
 the architecture and a list of build constraints that must not be rediscovered.
 

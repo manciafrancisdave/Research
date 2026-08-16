@@ -49,6 +49,6 @@ Check the built artifact, not the build log. A passing build proves none of this
 Copy it to the phone and open it. Android will ask you to allow installs from
 this source; that is expected for an APK that did not come from Play.
 
-**Uninstall any older S.I.R.E.N. build first.** The current key was generated on
+**Uninstall any older SIREN build first.** The current key was generated on
 5 Aug 2026 and Android refuses to install over an app signed with a different
 one. The error it gives — "App not installed" — does not explain why.

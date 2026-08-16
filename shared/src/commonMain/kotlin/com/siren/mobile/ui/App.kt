@@ -103,6 +103,67 @@ fun App() {
 
 @Composable
 private fun AppContent() {
+    // The alert is drawn over everything and deliberately sits OUTSIDE the auth gates in
+    // AppShell. A full-screen intent wakes a locked phone into a cold start, where
+    // `authResolved` is false and the user document has not arrived yet — so the shell
+    // renders the splash, then a spinner. That is what an earthquake used to look like on a
+    // locked phone: the alarm sounding with nothing on screen to explain it or stop it.
+    Box(Modifier.fillMaxSize()) {
+        AppShell()
+        AlertOverlay()
+    }
+}
+
+@Composable
+private fun AlertOverlay() {
+    val repo = SirenRepository
+    val incomingAlert by repo.incomingAlert.collectAsState()
+    val myResponses by repo.myResponses.collectAsState()
+    val settings by repo.settings.collectAsState()
+
+    val incoming = incomingAlert
+    AnimatedVisibility(
+        visible = incoming != null,
+        enter = fadeIn(tween(160)) + scaleIn(tween(220), initialScale = 0.96f),
+        exit = fadeOut(tween(140)),
+    ) {
+        if (incoming != null) {
+            var confirming by remember(incoming.id) { mutableStateOf(false) }
+            Box(
+                Modifier
+                    .fillMaxSize()
+
+                    .background(MaterialTheme.colorScheme.background)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {},
+            ) {
+                if (confirming) {
+                    SafetyConfirmationScreen(
+                        alert = incoming,
+                        myResponse = myResponses[incoming.id],
+                        onRespond = { repo.submitMyResponse(incoming.id, it) },
+                        onDone = { repo.consumeIncomingAlert() },
+                        onBack = { confirming = false },
+                    )
+                } else {
+                    AlertScreen(
+                        alert = incoming,
+                        vibrationEnabled = settings.vibration,
+                        myResponse = myResponses[incoming.id],
+                        onRespond = { repo.submitMyResponse(incoming.id, it) },
+                        onConfirmStatus = { confirming = true },
+                        onDismiss = { repo.consumeIncomingAlert() },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppShell() {
     val repo = SirenRepository
     val scope = rememberCoroutineScope()
 
@@ -115,7 +176,6 @@ private fun AppContent() {
     val roster by repo.roster.collectAsState()
     val settings by repo.settings.collectAsState()
     val online by repo.online.collectAsState()
-    val incomingAlert by repo.incomingAlert.collectAsState()
     val authLoading by repo.authLoading.collectAsState()
     val authError by repo.authError.collectAsState()
 
@@ -514,45 +574,6 @@ private fun AppContent() {
         )
     }
 
-    val incoming = incomingAlert
-    AnimatedVisibility(
-        visible = incoming != null,
-        enter = fadeIn(tween(160)) + scaleIn(tween(220), initialScale = 0.96f),
-        exit = fadeOut(tween(140)),
-    ) {
-        if (incoming != null) {
-            var confirming by remember(incoming.id) { mutableStateOf(false) }
-            Box(
-                Modifier
-                    .fillMaxSize()
-
-                    .background(MaterialTheme.colorScheme.background)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) {},
-            ) {
-                if (confirming) {
-                    SafetyConfirmationScreen(
-                        alert = incoming,
-                        myResponse = myResponses[incoming.id],
-                        onRespond = { repo.submitMyResponse(incoming.id, it) },
-                        onDone = { repo.consumeIncomingAlert() },
-                        onBack = { confirming = false },
-                    )
-                } else {
-                    AlertScreen(
-                        alert = incoming,
-                        vibrationEnabled = settings.vibration,
-                        myResponse = myResponses[incoming.id],
-                        onRespond = { repo.submitMyResponse(incoming.id, it) },
-                        onConfirmStatus = { confirming = true },
-                        onDismiss = { repo.consumeIncomingAlert() },
-                    )
-                }
-            }
-        }
-    }
 }
 
 private const val STEP_LOGIN = 0

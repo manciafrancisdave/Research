@@ -70,7 +70,12 @@ class MainActivity : ComponentActivity(), ProfilePhotoPicker {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        splash.setKeepOnScreenCondition { !SirenRepository.authResolved.value }
+        // Holding the splash until auth resolves is right on a normal launch and wrong on an
+        // alert: a full-screen intent wakes the phone into a cold start, and keeping the
+        // splash up would cover the alert screen for as long as Firebase takes to answer —
+        // indefinitely if the device woke with no network. An alert paints immediately.
+        val launchedForAlert = intent?.hasExtra(EXTRA_ALERT_ID) == true
+        splash.setKeepOnScreenCondition { !launchedForAlert && !SirenRepository.authResolved.value }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
@@ -79,6 +84,25 @@ class MainActivity : ComponentActivity(), ProfilePhotoPicker {
         handleIntent(intent)
 
         setContent { App() }
+
+        // handleIntent only fires for an intent that carries the extra, and it runs before
+        // the alert has been fetched. Following the alert itself covers every route in —
+        // full-screen intent, the service's own launch, a push arriving while the activity
+        // is already alive — and, just as importantly, undoes the override afterwards:
+        // setShowWhenLocked and FLAG_KEEP_SCREEN_ON persist, so without this the app sits
+        // on the lock screen with the display pinned on long after the earthquake.
+        lifecycleScope.launch {
+            var sawAlert = false
+            SirenRepository.incomingAlert.collect { alert ->
+                if (alert != null) {
+                    sawAlert = true
+                    showOverLockScreen()
+                } else if (sawAlert) {
+                    sawAlert = false
+                    clearLockScreenOverride()
+                }
+            }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -110,5 +134,19 @@ class MainActivity : ComponentActivity(), ProfilePhotoPicker {
         if (keyguard?.isKeyguardSecure == false) {
             runCatching { keyguard.requestDismissKeyguard(this, null) }
         }
+    }
+
+    private fun clearLockScreenOverride() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(false)
+            setTurnScreenOn(false)
+        } else {
+            @Suppress("DEPRECATION")
+            window.clearFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 }

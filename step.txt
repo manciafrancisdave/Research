@@ -1,5 +1,5 @@
 ===============================================================================
- S.I.R.E.N. MOBILE - SETUP GUIDE  (rebuild, v2.4.0)
+ SIREN MOBILE - SETUP GUIDE  (rebuild, v2.4.0)
  Seismic Integrated Response and Emergency Notification
  City of Bogo Senior High School - Practical Research 2
 ===============================================================================
@@ -141,8 +141,8 @@
 
  --- 3.4  Installing -------------------------------------------------------
 
-   IMPORTANT: uninstall any older S.I.R.E.N. build from the phone first
-   (Settings -> Apps -> S.I.R.E.N. -> Uninstall). The signing key changed, so
+   IMPORTANT: uninstall any older SIREN build from the phone first
+   (Settings -> Apps -> SIREN -> Uninstall). The signing key changed, so
    installing over the old build fails with "App not installed".
 
    Then copy the APK to the phone and open it, or:

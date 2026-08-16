@@ -27,6 +27,7 @@ import com.siren.mobile.data.SirenRepository
 import com.siren.mobile.model.Intensity
 import com.siren.mobile.model.ResponseStatus
 import com.siren.mobile.platform.Platform
+import kotlin.math.ceil
 
 class SirenAlarmService : Service() {
 
@@ -50,6 +51,12 @@ class SirenAlarmService : Service() {
         private const val NOTIFICATION_ID = 4102
         private const val WATCHDOG_INTERVAL_MS = 2_000L
 
+        // USAGE_ALARM routes around the ringer and DND, but it still plays at whatever the
+        // alarm stream is set to — and a phone left on zero is silent with no error. A real
+        // alarm clock raises the stream itself; so does this, and puts it back afterwards.
+        private const val VOLUME_FLOOR_RED = 0.9f
+        private const val VOLUME_FLOOR_YELLOW = 0.6f
+
         @Volatile
         var soundResId: Int = 0
 
@@ -65,6 +72,7 @@ class SirenAlarmService : Service() {
     private var screenLock: PowerManager.WakeLock? = null
     private var focusRequest: AudioFocusRequest? = null
     private var currentAlertId: String? = null
+    private var priorAlarmVolume: Int? = null
     private val handler = Handler(Looper.getMainLooper())
     private var timeoutRunnable: Runnable? = null
     private var shouldRun = false
@@ -130,6 +138,7 @@ class SirenAlarmService : Service() {
             raiseAlertScreen(alertId)
         }
         requestFocus(intensity)
+        raiseAlarmVolume(intensity)
         startPlayback(intensity)
         if (vibrate) startVibration(intensity)
 
@@ -188,6 +197,39 @@ class SirenAlarmService : Service() {
                 }
                 .build()
                 .also { am.requestAudioFocus(it) }
+        }
+    }
+
+    /**
+     * Lifts the alarm stream to an audible floor if the user has it below one, remembering
+     * the old value so [stopEverything] can put it back. Nothing is changed when the phone
+     * is already loud enough, so the common case leaves the user's setting alone.
+     *
+     * `setStreamVolume` throws under some DND policies without ACCESS_NOTIFICATION_POLICY;
+     * that is caught rather than requested, because playback itself already bypasses DND —
+     * a phone that refuses the volume change still sounds at whatever it was set to.
+     */
+    private fun raiseAlarmVolume(intensity: Intensity) {
+        if (intensity == Intensity.GREEN) return
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        runCatching {
+            val max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+            val fraction = if (intensity == Intensity.RED) VOLUME_FLOOR_RED else VOLUME_FLOOR_YELLOW
+            val floor = ceil(max * fraction).toInt().coerceIn(1, max.coerceAtLeast(1))
+            val current = am.getStreamVolume(AudioManager.STREAM_ALARM)
+            if (max > 0 && current < floor) {
+                priorAlarmVolume = current
+                am.setStreamVolume(AudioManager.STREAM_ALARM, floor, 0)
+            }
+        }.onFailure { Log.w(TAG, "Could not raise the alarm stream volume", it) }
+    }
+
+    private fun restoreAlarmVolume() {
+        val prior = priorAlarmVolume ?: return
+        priorAlarmVolume = null
+        runCatching {
+            (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
+                ?.setStreamVolume(AudioManager.STREAM_ALARM, prior, 0)
         }
     }
 
@@ -372,6 +414,7 @@ class SirenAlarmService : Service() {
             }
         }
         focusRequest = null
+        restoreAlarmVolume()
 
         runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
         wakeLock = null

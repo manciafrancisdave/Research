@@ -72,7 +72,7 @@ fun LoginScreen(
         )
 
         Text(
-            "S.I.R.E.N. (Seismic Integrated Response & Emergency Notification)",
+            "SIREN (Seismic Integrated Response & Emergency Notification)",
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,

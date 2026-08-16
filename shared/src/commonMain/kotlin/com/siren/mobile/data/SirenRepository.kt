@@ -882,6 +882,31 @@ object SirenRepository {
         }
     }
 
+    /**
+     * Paints the alert from the push payload itself, then lets [showAlertById] refine it.
+     *
+     * [showAlertById] alone needs a Firestore read, and the moment that matters most — a
+     * phone woken from a locked, dark and quite possibly offline state — is exactly when
+     * that read is slowest, or never returns at all. The alarm would be sounding behind an
+     * empty screen. The push already carries everything the alert screen draws, so it goes
+     * up immediately and the stored document corrects it if and when it arrives.
+     *
+     * `detectedAt` is the arrival time rather than the detection time; the Firestore copy
+     * carries the real one and overwrites this within a second on a healthy connection.
+     */
+    fun showAlertFromPush(alertId: String, intensity: Intensity, magnitudeG: Double) {
+        if (_incomingAlert.value?.id != alertId) {
+            _incomingAlert.value = AlertRecord(
+                id = alertId,
+                intensity = intensity,
+                magnitudeG = magnitudeG,
+                detectedAt = Platform.services.nowMillis(),
+                source = AlertSource.ESP32,
+            )
+        }
+        showAlertById(alertId)
+    }
+
     fun showAlertById(alertId: String) {
         scope.launch {
             _alerts.value.firstOrNull { it.id == alertId }?.let {

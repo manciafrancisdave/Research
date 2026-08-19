@@ -8,6 +8,31 @@
 
 #include "secrets.h"
 
+// ---------------------------------------------------------------------------
+// SIM800L — optional GSM fallback for when WiFi is down.
+//
+// These defaults keep the modem OFF, so a secrets.h written before the modem
+// existed still compiles and behaves exactly as it did. Switch it on by adding
+// SIM800L_ENABLED 1 and SIM_RECIPIENTS to secrets.h — see secrets.h.example.
+//
+// The modem sends SMS only. It deliberately does NOT carry the Firestore write:
+// SIM800L is 2G with an onboard TLS stack that tops out around TLS 1.0, and
+// Google's REST endpoints require TLS 1.2+, so the handshake fails before any
+// request is made. SMS is the path that actually survives a WiFi outage.
+// ---------------------------------------------------------------------------
+#ifndef SIM800L_ENABLED
+  #define SIM800L_ENABLED 0
+#endif
+#ifndef SIM_RECIPIENTS
+  #define SIM_RECIPIENTS ""
+#endif
+#ifndef SIM_MIN_BAND
+  #define SIM_MIN_BAND "yellow"
+#endif
+#ifndef SIM_SMS_COOLDOWN_MS
+  #define SIM_SMS_COOLDOWN_MS 120000UL
+#endif
+
 const int PIN_X = 34;
 const int PIN_Y = 35;
 const int PIN_Z = 32;
@@ -20,7 +45,17 @@ const int PIN_BUZZER     = 14;
 const int PIN_SDA = 21;
 const int PIN_SCL = 22;
 
+// UART2. Wire ESP32 RX to the modem's TXD and ESP32 TX to the modem's RXD —
+// crossed, not straight through. The ESP32 TX line needs a divider down to
+// ~2.8 V; the modem's 3.3 V-tolerant input is the one thing here that is not.
+const int PIN_SIM_RX = 16;   // ESP32 RX2  <-- SIM800L TXD
+const int PIN_SIM_TX = 17;   // ESP32 TX2  --> SIM800L RXD (through divider)
+
 LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+#if SIM800L_ENABLED
+HardwareSerial simSerial(2);
+#endif
 
 #define BUZZER_IS_ACTIVE 1
 
@@ -387,6 +422,276 @@ void uploadAlert(const char* band, float g) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// SIM800L driver
+//
+// Sending an SMS takes seconds and can take half a minute on a weak cell, so
+// the dispatch is a state machine pumped from loop() rather than a blocking
+// call. Blocking here would freeze the 200 Hz sampler during the exact window
+// an aftershock is most likely, and would overrun ALERT_HOLD_MS.
+// ---------------------------------------------------------------------------
+#if SIM800L_ENABLED
+
+const uint8_t  SIM_MAX_RECIPIENTS    = 5;
+const uint32_t SIM_PROMPT_TIMEOUT_MS = 8000;
+const uint32_t SIM_SEND_TIMEOUT_MS   = 30000;
+
+String   simNumbers[SIM_MAX_RECIPIENTS];
+uint8_t  simNumberCount = 0;
+bool     simPresent     = false;
+uint32_t simLastSmsAtMs = 0;
+bool     simEverSent    = false;
+
+enum SmsState { SMS_IDLE, SMS_WAIT_PROMPT, SMS_WAIT_ACK };
+SmsState smsState    = SMS_IDLE;
+uint8_t  smsNext     = 0;   // recipient currently being sent
+uint8_t  smsQueued   = 0;   // size of this batch; smsNext < smsQueued == work pending
+String   smsBody;
+uint32_t smsDeadline = 0;
+String   simRx;             // rolling buffer for the non-blocking path
+
+void simResetRx() {
+  while (simSerial.available()) simSerial.read();
+  simRx = "";
+}
+
+void simDrain() {
+  while (simSerial.available()) {
+    simRx += (char)simSerial.read();
+    if (simRx.length() > 300) simRx.remove(0, simRx.length() - 300);
+  }
+}
+
+// Blocking — only ever used at boot and from the serial console, never while
+// an alert is being handled.
+bool simWaitFor(const char* token, uint32_t timeoutMs, String* captured = nullptr) {
+  uint32_t start = millis();
+  String buf;
+  while (millis() - start < timeoutMs) {
+    while (simSerial.available()) {
+      buf += (char)simSerial.read();
+      if (buf.length() > 300) buf.remove(0, buf.length() - 300);
+      if (buf.indexOf(token) >= 0)   { if (captured) *captured = buf; return true;  }
+      if (buf.indexOf("ERROR") >= 0) { if (captured) *captured = buf; return false; }
+    }
+    delay(2);
+  }
+  if (captured) *captured = buf;
+  return false;
+}
+
+bool simCmd(const char* cmd, const char* expect, uint32_t timeoutMs, String* captured = nullptr) {
+  simResetRx();
+  simSerial.println(cmd);
+  return simWaitFor(expect, timeoutMs, captured);
+}
+
+void simParseRecipients() {
+  simNumberCount = 0;
+  String all = String(SIM_RECIPIENTS);
+  all.trim();
+  int from = 0;
+  while (from <= (int)all.length() && simNumberCount < SIM_MAX_RECIPIENTS) {
+    int comma = all.indexOf(',', from);
+    String one = (comma < 0) ? all.substring(from) : all.substring(from, comma);
+    one.trim();
+    if (one.length()) simNumbers[simNumberCount++] = one;
+    if (comma < 0) break;
+    from = comma + 1;
+  }
+}
+
+int simSignal() {                 // 0-31, or 99 when unknown
+  String resp;
+  if (!simCmd("AT+CSQ", "+CSQ:", 3000, &resp)) return 99;
+  int i = resp.indexOf("+CSQ:");
+  if (i < 0) return 99;
+  int c = resp.indexOf(',', i);
+  if (c < 0) return 99;
+  return resp.substring(i + 5, c).toInt();
+}
+
+int simRegistration() {           // 1 = registered home, 5 = roaming
+  String resp;
+  if (!simCmd("AT+CREG?", "+CREG:", 3000, &resp)) return -1;
+  int i = resp.indexOf("+CREG:");
+  if (i < 0) return -1;
+  int c = resp.indexOf(',', i);
+  if (c < 0) return -1;
+  return resp.substring(c + 1, c + 2).toInt();
+}
+
+bool simInit() {
+  simParseRecipients();
+  simSerial.begin(9600, SERIAL_8N1, PIN_SIM_RX, PIN_SIM_TX);
+  delay(500);
+
+  simPresent = false;
+  for (uint8_t i = 0; i < 6 && !simPresent; i++) {
+    if (simCmd("AT", "OK", 1200)) simPresent = true;
+    else delay(800);
+  }
+
+  if (!simPresent) {
+    Serial.println("SIM,ERR,no reply to AT");
+    Serial.println("SIM,HINT,supply must hold 3.4-4.4V at 2A peak; check TX/RX are crossed; baud 9600");
+    lcdTwoLines("SIM800L no reply", "check power/wire");
+    delay(1500);
+    return false;
+  }
+
+  simCmd("ATE0", "OK", 1500);                  // echo off, or every reply is doubled
+  simCmd("AT+CMEE=2", "OK", 1500);             // verbose errors
+  simCmd("AT+CNMI=0,0,0,0,0", "OK", 1500);     // do not push incoming SMS at us mid-alert
+  simCmd("AT+CSCS=\"GSM\"", "OK", 1500);
+
+  if (!simCmd("AT+CMGF=1", "OK", 3000)) {
+    Serial.println("SIM,ERR,SMS text mode refused -- SIM may be missing or PIN-locked");
+    return false;
+  }
+
+  int reg = -1, csq = 99;
+  uint32_t start = millis();
+  while (millis() - start < 20000) {
+    reg = simRegistration();
+    csq = simSignal();
+    if ((reg == 1 || reg == 5) && csq != 99 && csq >= 5) break;
+    delay(1500);
+  }
+
+  Serial.printf("SIM,READY,reg=%d,csq=%d,recipients=%u\n", reg, csq, simNumberCount);
+  if (reg != 1 && reg != 5)
+    Serial.println("SIM,WARN,not registered -- SIM seated? PIN disabled? 2G coverage?");
+  if (csq == 99 || csq < 8)
+    Serial.println("SIM,WARN,weak or unknown signal -- is the antenna attached?");
+  if (simNumberCount == 0)
+    Serial.println("SIM,WARN,SIM_RECIPIENTS is empty -- no SMS will ever be sent");
+  return true;
+}
+
+uint8_t bandRank(const char* b) {
+  if (!strcmp(b, "red"))    return 2;
+  if (!strcmp(b, "yellow")) return 1;
+  return 0;
+}
+
+void smsQueueAlert(const char* band, float g) {
+  if (!simPresent || simNumberCount == 0) return;
+  if (bandRank(band) < bandRank(SIM_MIN_BAND)) return;
+
+  if (smsNext < smsQueued) {
+    Serial.println("SIM,SKIP,previous batch still sending");
+    return;
+  }
+  if (simEverSent && (millis() - simLastSmsAtMs) < SIM_SMS_COOLDOWN_MS) {
+    Serial.printf("SIM,SKIP,cooldown,%lus left\n",
+                  (unsigned long)((SIM_SMS_COOLDOWN_MS - (millis() - simLastSmsAtMs)) / 1000));
+    return;
+  }
+
+  char up[8];
+  strncpy(up, band, sizeof(up) - 1);
+  up[sizeof(up) - 1] = '\0';
+  for (char* p = up; *p; ++p) *p = toupper((unsigned char)*p);
+
+  smsBody  = "SIREN ";
+  smsBody += NODE_ID;
+  smsBody += " ";
+  smsBody += up;
+  smsBody += ": peak ";
+  smsBody += String(g, 3);
+  smsBody += "g at ";
+  smsBody += isoNowUtc();
+  smsBody += ". Quake detected by the school sensor. Auto-message, do not reply.";
+
+  smsNext        = 0;
+  smsQueued      = simNumberCount;
+  smsState       = SMS_IDLE;
+  simLastSmsAtMs = millis();
+  simEverSent    = true;
+
+  Serial.printf("SIM,QUEUE,%u recipients,band=%s\n", smsQueued, band);
+}
+
+// "Sent" here means the network accepted the message, exactly as it does in the
+// app. There are no delivery receipts; do not report it as "delivered".
+void pumpSms() {
+  if (!simPresent) return;
+
+  switch (smsState) {
+
+    case SMS_IDLE:
+      if (smsNext >= smsQueued) return;
+      simResetRx();
+      simSerial.print("AT+CMGS=\"");
+      simSerial.print(simNumbers[smsNext]);
+      simSerial.println("\"");
+      smsDeadline = millis() + SIM_PROMPT_TIMEOUT_MS;
+      smsState    = SMS_WAIT_PROMPT;
+      break;
+
+    case SMS_WAIT_PROMPT:
+      simDrain();
+      if (simRx.indexOf('>') >= 0) {
+        simSerial.print(smsBody);
+        simSerial.write(26);                  // Ctrl-Z sends it
+        simRx.remove(0);
+        smsDeadline = millis() + SIM_SEND_TIMEOUT_MS;
+        smsState    = SMS_WAIT_ACK;
+      } else if (simRx.indexOf("ERROR") >= 0 || (int32_t)(millis() - smsDeadline) >= 0) {
+        Serial.printf("SIM,FAIL,%s,no prompt\n", simNumbers[smsNext].c_str());
+        simSerial.write(27);                  // ESC abandons a half-open CMGS
+        smsNext++;
+        smsState = SMS_IDLE;
+      }
+      break;
+
+    case SMS_WAIT_ACK:
+      simDrain();
+      if (simRx.indexOf("+CMGS:") >= 0) {
+        Serial.printf("SIM,SENT,%s\n", simNumbers[smsNext].c_str());
+        smsNext++;
+        smsState = SMS_IDLE;
+      } else if (simRx.indexOf("ERROR") >= 0) {
+        Serial.printf("SIM,FAIL,%s,modem error\n", simNumbers[smsNext].c_str());
+        smsNext++;
+        smsState = SMS_IDLE;
+      } else if ((int32_t)(millis() - smsDeadline) >= 0) {
+        Serial.printf("SIM,FAIL,%s,timeout\n", simNumbers[smsNext].c_str());
+        smsNext++;
+        smsState = SMS_IDLE;
+      }
+      break;
+  }
+}
+
+void simStatusLine() {
+  if (!simPresent) { Serial.println("SIM,STAT,present=0"); return; }
+  Serial.printf("SIM,STAT,present=1,reg=%d,csq=%d,recipients=%u,sending=%d\n",
+                simRegistration(), simSignal(), simNumberCount,
+                smsNext < smsQueued ? 1 : 0);
+}
+
+void simTestSms() {
+  if (!simPresent)            { Serial.println("SIM,ERR,modem not present");     return; }
+  if (simNumberCount == 0)    { Serial.println("SIM,ERR,no recipients");         return; }
+  if (smsNext < smsQueued)    { Serial.println("SIM,ERR,batch already sending"); return; }
+  smsBody   = "SIREN " NODE_ID " test. If you received this, the SMS fallback works. Do not reply.";
+  smsNext   = 0;
+  smsQueued = simNumberCount;
+  smsState  = SMS_IDLE;
+  Serial.printf("SIM,TEST,queued for %u recipients\n", smsQueued);
+}
+
+#else   // SIM800L disabled — no-op stubs so the call sites stay clean
+
+inline void pumpSms() {}
+inline void smsQueueAlert(const char*, float) {}
+inline void simStatusLine() { Serial.println("SIM,STAT,disabled"); }
+inline void simTestSms()    { Serial.println("SIM,ERR,set SIM800L_ENABLED 1 in secrets.h"); }
+
+#endif  // SIM800L_ENABLED
+
 void fireAlert(float g) {
   tAlert = millis();
   const char* band = bandName(g);
@@ -419,7 +724,11 @@ void fireAlert(float g) {
   state = ALERTING;
   tStateEnd = millis() + ALERT_HOLD_MS;
 
+  // Firestore first — it is the fast path when WiFi is up, and it returns
+  // immediately when it is not, so queuing the SMS behind it costs nothing in
+  // the outage case that the SMS exists for.
   uploadAlert(band, g);
+  smsQueueAlert(band, g);
 }
 
 void rejectAsNoise(float g) {
@@ -446,6 +755,8 @@ void handleCommand(char c) {
                     WiFi.localIP().toString().c_str(),
                     authed ? 1 : 0, (unsigned long)time(nullptr));
       break;
+    case 'M': case 'm': simStatusLine(); break;
+    case 'T': case 't': simTestSms(); break;
     case 'G': case 'g': strcpy(lastType, "manual"); tOnset = tDetect = millis(); fireAlert(0.22f); break;
     case 'Y': case 'y': strcpy(lastType, "manual"); tOnset = tDetect = millis(); fireAlert(0.48f); break;
     case 'R': case 'r': strcpy(lastType, "manual"); tOnset = tDetect = millis(); fireAlert(0.85f); break;
@@ -472,11 +783,11 @@ void setup() {
   buzzerOff();
 
   analogReadResolution(12);
-#if ESP_ARDUINO_VERSION_MAJOR >= 3
-  analogSetAttenuation(ADC_ATTEN_DB_12);
-#else
+  // ADC_11db is the correct symbol on both core 2.x and 3.x — the Arduino layer
+  // exports {ADC_0db, ADC_2_5db, ADC_6db, ADC_11db, ADC_ATTENDB_MAX} and nothing
+  // else. ADC_ATTEN_DB_12 is an ESP-IDF name, so the version-gated branch that
+  // used it failed to compile on exactly the 3.x cores it was meant for.
   analogSetAttenuation(ADC_11db);
-#endif
 
   Wire.begin(PIN_SDA, PIN_SCL);
   lcd.init();
@@ -493,6 +804,13 @@ void setup() {
   syncClock();
   signIn();
 
+#if SIM800L_ENABLED
+  lcdTwoLines("SIREN", "GSM starting...");
+  simInit();
+#else
+  Serial.println("SIM,disabled,SIM800L_ENABLED=0");
+#endif
+
   delay(1500);
   calibrate();
   nextSampleUs = micros();
@@ -500,6 +818,7 @@ void setup() {
 
 void loop() {
   pumpConsole();
+  pumpSms();
 
   static uint32_t lastCheck = 0;
   if (millis() - lastCheck > 30000) {

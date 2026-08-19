@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
@@ -39,6 +40,7 @@ import com.siren.mobile.ui.components.InfoBanner
 import com.siren.mobile.ui.components.ListGroup
 import com.siren.mobile.ui.components.ListRow
 import com.siren.mobile.ui.components.OfflineBanner
+import com.siren.mobile.ui.components.Pill
 import com.siren.mobile.ui.components.RowDivider
 import com.siren.mobile.ui.components.SectionHeader
 import com.siren.mobile.ui.components.SkeletonList
@@ -56,6 +58,7 @@ fun ParentDashboardScreen(
     schoolHotline: String = "(082) 227-4410",
     onLinkStudent: () -> Unit,
     onOpenGuide: () -> Unit,
+    onOpenDemo: () -> Unit,
     onCall: (String) -> Unit,
 ) {
     val status = SirenTheme.status
@@ -194,6 +197,15 @@ fun ParentDashboardScreen(
                     subtitle = "Drop, cover, hold and 27 more",
                     onClick = onOpenGuide,
                 )
+                RowDivider()
+
+                TileRow(
+                    icon = Icons.Filled.Science,
+                    title = "Demo mode",
+                    subtitle = "Simulate an alert level",
+                    onClick = onOpenDemo,
+                    badge = "DEV",
+                )
             }
         }
     }
@@ -205,6 +217,7 @@ private fun TileRow(
     title: String,
     subtitle: String,
     onClick: () -> Unit,
+    badge: String? = null,
 ) {
     ListRow(
         title = title,
@@ -227,11 +240,23 @@ private fun TileRow(
             }
         },
         trailing = {
-            Icon(
-                Icons.Filled.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Space.xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                badge?.let {
+                    Pill(
+                        it,
+                        MaterialTheme.colorScheme.onPrimaryContainer,
+                        MaterialTheme.colorScheme.primaryContainer,
+                    )
+                }
+                Icon(
+                    Icons.Filled.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         },
     )
 }

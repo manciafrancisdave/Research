@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Warning
@@ -78,7 +77,6 @@ fun StudentDashboardScreen(
     loading: Boolean,
     onOpenHistory: () -> Unit,
     onOpenContacts: () -> Unit,
-    onOpenDemo: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenGuide: () -> Unit,
     onOpenGuardians: () -> Unit,
@@ -168,8 +166,6 @@ fun StudentDashboardScreen(
                 ActionRow(Icons.Filled.MenuBook, "Safety guide", "Drop, cover, hold and 27 more", onOpenGuide)
                 RowDivider()
                 ActionRow(Icons.Filled.ContactEmergency, "Emergency contacts", "Reachable without internet", onOpenContacts)
-                RowDivider()
-                ActionRow(Icons.Filled.Science, "Demo mode", "Simulate an alert level", onOpenDemo, badge = "DEV")
                 RowDivider()
                 ActionRow(Icons.Filled.Settings, "Settings", "Alerts, account, privacy", onOpenSettings)
             }

@@ -591,9 +591,15 @@ screen — and only when something is actually missing.
 - **Student** — receives alerts, submits own status, gets a 6-char `shortCode`,
   confirms or declines guardian link requests
 - **Teacher / School Admin** — roster for their `classId`, live roll-call, close events,
-  **adds students to their class by linking code**
+  **adds students to their class by linking code**, **Demo Mode**
 - **Parent / Guardian** — status of students in `linkedStudentIds`, once each student
-  has confirmed the link
+  has confirmed the link, **Demo Mode**
+
+**Demo Mode is reached from the teacher and parent dashboards, not the student one.**
+`simulateAlert` writes a real `alerts` document that fans out to *every* device on the
+`alerts` topic, so the person triggering a drill should be the one running it, not one
+of the students receiving it. The screen itself is role-agnostic — only the entry points
+moved — so `Dest.Demo` still renders the same way whoever opens it.
 
 ### Guardian linking needs the student's confirmation
 

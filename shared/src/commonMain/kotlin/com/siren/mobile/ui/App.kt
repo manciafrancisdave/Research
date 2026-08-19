@@ -411,7 +411,6 @@ private fun AppShell() {
                             loading = !alertsLoaded,
                             onOpenHistory = { selectTab(Dest.History) },
                             onOpenContacts = { push(Dest.Contacts) },
-                            onOpenDemo = { push(Dest.Demo) },
                             onOpenSettings = { selectTab(Dest.Settings) },
                             onOpenGuide = { push(Dest.Guide) },
                             onOpenGuardians = { push(Dest.Guardians) },
@@ -428,6 +427,7 @@ private fun AppShell() {
                             onOpenLive = { alerts.firstOrNull()?.let { push(Dest.Live(it.id)) } },
                             onOpenHistory = { selectTab(Dest.History) },
                             onOpenGuide = { push(Dest.Guide) },
+                            onOpenDemo = { push(Dest.Demo) },
                             onAddStudent = { code -> addStudentToClass(code) },
                             onRemoveStudent = { repo.removeStudentFromClass(it) },
                             onEditProfile = { push(Dest.Profile) },
@@ -441,6 +441,7 @@ private fun AppShell() {
                             loading = !alertsLoaded,
                             onLinkStudent = { push(Dest.Link) },
                             onOpenGuide = { push(Dest.Guide) },
+                            onOpenDemo = { push(Dest.Demo) },
                             onCall = { Platform.services.dial(it) },
                         )
                     }
@@ -456,6 +457,7 @@ private fun AppShell() {
                             onOpenLive = { alerts.firstOrNull()?.let { push(Dest.Live(it.id)) } },
                             onOpenHistory = { selectTab(Dest.History) },
                             onOpenGuide = { push(Dest.Guide) },
+                            onOpenDemo = { push(Dest.Demo) },
                             onAddStudent = { code -> addStudentToClass(code) },
                             onRemoveStudent = { repo.removeStudentFromClass(it) },
                             onEditProfile = { push(Dest.Profile) },
@@ -469,6 +471,7 @@ private fun AppShell() {
                             loading = !alertsLoaded,
                             onLinkStudent = { push(Dest.Link) },
                             onOpenGuide = { push(Dest.Guide) },
+                            onOpenDemo = { push(Dest.Demo) },
                             onCall = { Platform.services.dial(it) },
                         )
                     }

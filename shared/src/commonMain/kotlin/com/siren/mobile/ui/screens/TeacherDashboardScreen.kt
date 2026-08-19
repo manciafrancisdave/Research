@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -81,6 +82,7 @@ fun TeacherDashboardScreen(
     onOpenLive: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenGuide: () -> Unit,
+    onOpenDemo: () -> Unit,
     onAddStudent: (code: String) -> Unit,
     onRemoveStudent: (uid: String) -> Unit,
     onEditProfile: () -> Unit,
@@ -295,6 +297,27 @@ fun TeacherDashboardScreen(
                             contentDescription = null,
                             Modifier.size(24.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                )
+                RowDivider()
+                ListRow(
+                    title = "Demo mode",
+                    subtitle = "Simulate an alert level",
+                    onClick = onOpenDemo,
+                    leading = {
+                        Icon(
+                            Icons.Filled.Science,
+                            contentDescription = null,
+                            Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    trailing = {
+                        Pill(
+                            "DEV",
+                            MaterialTheme.colorScheme.onPrimaryContainer,
+                            MaterialTheme.colorScheme.primaryContainer,
                         )
                     },
                 )

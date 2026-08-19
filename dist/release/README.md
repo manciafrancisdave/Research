@@ -17,7 +17,15 @@ unpacking it.
 
 | File | Version | Signing | Size | Built |
 |---|---|---|---|---|
-| `SIREN-v2.9.1-release.apk` | 2.9.1 (versionCode 8) | `siren-release.jks`, alias `siren` | 4.60 MB | 17 Aug 2026 |
+| `SIREN-v2.9.2-release.apk` | 2.9.2 (versionCode 9) | `siren-release.jks` (**new key, 19 Aug 2026**), alias `siren` | 4.61 MB | 19 Aug 2026 |
+
+**2.9.2 moves Demo Mode off the student account** onto the teacher and parent dashboards.
+Triggering a drill writes a real `alerts` document that fans out to every device on the
+`alerts` topic, so it belongs with whoever is running the drill rather than one of the
+students receiving it.
+
+**2.9.2 is signed with a new key and will not install over 2.9.1.** See the signing-key
+section below — every installed copy has to be uninstalled by hand first.
 
 2.9.0 added the **emergency SMS**: a student tapping "I need help" texts their approved
 guardians automatically, before the Firestore write, so it works with no connection. A
@@ -45,14 +53,31 @@ Same signing key as 2.8.0, so this upgrades in place.
 Demo Mode sends for real — the dispatch does not distinguish a simulated event from a
 sensor one.
 
-**The signing key changed again on 16 Aug 2026.** The key that signed 2.6.0 was
-not recoverable — it existed only on the machine that built it, and that machine
-was not available. A new 4096-bit RSA key was generated, valid 30 years. This is
-the second key loss in this project's history; **back up `siren-release.jks` and
-its password off this machine now**, because a third loss has the same cost:
-every installed copy has to be uninstalled by hand before it can be updated.
+**The signing key changed a third time on 19 Aug 2026.** The key that signed 2.8.0–2.9.1
+was not on the build machine and could not be found anywhere on it, so a replacement was
+generated — 4096-bit RSA, SHA384withRSA, alias `siren`, valid 30 years (to Aug 2056),
+matching the strength of the key it replaces. That is now **three key losses in this
+project's history**, each costing every user a manual uninstall.
 
-Signing certificate SHA-256 for 2.8.0:
+**Back up `siren-release.jks` and its password off this machine now.** The password is a
+32-character random string in `keystore.properties` in the repo root. Both files are
+gitignored and exist on exactly one machine; if they are lost, 2.9.3 forces another
+uninstall of every install.
+
+Signing certificate SHA-256 for **2.9.2** — this is the one to register in Firebase:
+
+```
+BA:20:E1:93:A4:8A:A7:81:46:76:B9:A6:EB:40:DE:16:F4:47:33:46:1A:A6:96:82:60:09:09:B7:A2:88:50:7D
+```
+
+SHA-1 for the same key, if a console field asks for it:
+
+```
+B5:01:DE:AF:ED:32:C7:28:DD:2C:11:DC:0A:91:51:43:E1:C0:94:64
+```
+
+Superseded — signed 2.8.0 through 2.9.1, registered in the console on 19 Aug 2026 and now
+matching nothing that can be built:
 
 ```
 EF:2E:14:D5:A2:C4:4D:19:72:58:CD:A7:8D:50:18:57:63:C7:ED:60:FD:77:6A:5E:EE:CC:CC:8B:1F:C8:8D:FC
@@ -91,10 +116,30 @@ Copy it to the phone and open it. Android will ask you to allow installs from
 this source; that is expected for an APK that did not come from Play.
 
 **Uninstall any older SIREN build first.** The current key was generated on
-16 Aug 2026 and Android refuses to install over an app signed with a different
-one. The error it gives — "App not installed" — does not explain why. This
-applies to *every* build that came before 2.8.0, debug and release alike.
+19 Aug 2026 and Android refuses to install over an app signed with a different
+one. The error it gives — "App not installed" — does not explain why. This now
+applies to *every* build that came before 2.9.2, debug and release alike,
+including 2.9.1 which was signed with the superseded key.
 
-From 2.8.0 onward, updates install over the top normally — provided
+From 2.9.2 onward, updates install over the top normally — provided
 `siren-release.jks` survives. That is now the single point of failure for
-in-place updates.
+in-place updates, and it has already failed three times.
+
+## Verified in the v2.9.2 artifact
+
+Checked against the built APK on 19 Aug 2026, not inferred from the build log:
+
+- **Signature** — `apksigner verify` passes; V2 signer certificate SHA-256 matches
+  the keystore fingerprint above, DN `CN=SIREN, OU=Practical Research 2, …`
+- **Alarm audio** — resolved through the resource table, not by filename:
+  `raw/siren_alarm -> res/dQ.mp3` at **139,695 bytes**, identical to 2.9.1. The APK
+  has **zero** `res/raw/` entries, which is expected under path shortening and is
+  exactly the check that misleads when done by filename
+- **Compose resources** — 28 `ic_sg_*` pictograms and 5 Inter weights survived R8
+- **1 `classes.dex`** against the debug build's 15 — R8 is on, as expected
+- **`lintVitalRelease` passed** — the release-only gate that has historically failed
+  on the `androidx.fragment` version Firebase pulls in transitively
+
+**Not run.** No device or emulator was available. These are static checks. They do
+not prove the app launches, that the alert reaches a locked screen, or that the
+emergency SMS sends — see the walkthrough in `dist/debug/README.md`.

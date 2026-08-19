@@ -16,7 +16,12 @@ named `SIREN-v<version>-debug.apk`.
 
 | File | Version | Size | Built |
 |---|---|---|---|
-| `SIREN-v2.9.1-debug.apk` | 2.9.1 (versionCode 8) | 25.7 MB | 17 Aug 2026 |
+| `SIREN-v2.9.2-debug.apk` | 2.9.2 (versionCode 9) | 25.7 MB | 19 Aug 2026 |
+
+**2.9.2 moves Demo Mode off the student account** onto the teacher and parent dashboards.
+Triggering a drill writes a real `alerts` document that fans out to every device on the
+`alerts` topic, so it belongs with the person running the drill rather than one of the
+students receiving it.
 
 2.9.0 added the emergency SMS to guardians and made a mobile number mandatory at sign-up.
 **2.9.1 fixes thirteen defects found by adversarial review of 2.8.0 and 2.9.0** — see
@@ -39,11 +44,25 @@ generated per machine and never committed, and this machine had none, so builds 
 does not explain why. Coming from 2.8.0, this installs over the top normally.
 
 Debug SHA-256, which has to be registered in Firebase for phone sign-up to work on a
-debug build:
+debug build. **2.9.2 was built on a different machine and is signed with a different
+debug key than 2.9.1** — `debug.keystore` is generated per machine and never committed,
+and this machine had none, so the SDK minted a fresh one during the build:
 
 ```
+# 2.9.2 — NOT yet registered in Firebase
+84:CB:0A:7B:D6:B4:24:22:52:4E:F2:8A:54:79:C6:BF:B0:EE:37:49:0A:81:AF:14:7B:79:3D:97:C5:8C:10:88
+
+# 2.9.1 and earlier, registered 19 Aug 2026
 84:45:C3:F4:A6:C4:F4:D8:23:72:FC:84:D6:84:30:BF:52:4B:2B:71:2B:9A:F8:1C:DD:AC:C0:60:22:44:60:11
 ```
+
+Two consequences, both of which look like unrelated faults:
+
+- **Phone sign-up fails on 2.9.2** with "This app is not authorized" until the first
+  fingerprint above is added to the console. Email sign-in, alerts, Firestore and the
+  alarm are unaffected.
+- **2.9.2 will not install over 2.9.1.** The keys differ, so Android reports
+  "App not installed" without explaining why. Uninstall first.
 
 Earlier notes claimed `28:6D:5C:E9:...` was already registered. It was not — the
 console's fingerprint list was empty on 16 Aug 2026, which is why phone sign-up has
